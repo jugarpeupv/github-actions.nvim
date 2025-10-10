@@ -1,0 +1,20 @@
+# Neovim
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Luarocks
+lua_modules/
+.luarocks/
+*.rock
+/luarocks
+
+# Test dependencies
+deps/
+
+# Documentation
+/doc/tags
+
+# Logs
+*.log
