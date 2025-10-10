@@ -1,0 +1,11 @@
+return {
+  _all = {
+    lua = "./lua_modules/bin/nlua",
+    lpath = "lua/?.lua;lua/?/init.lua",
+  },
+  default = {
+    verbose = true,
+    ROOT = { "spec/" },
+    pattern = "_spec%.lua$",
+  },
+}
