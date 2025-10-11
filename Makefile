@@ -1,4 +1,4 @@
-.PHONY: test test-file lint format check install-deps install-parser install-luarocks
+.PHONY: test test-file lint format check install-deps install-parser
 
 # Setup nvim-treesitter for tests
 install-parser:
@@ -26,44 +26,14 @@ test-file:
 	fi
 	./luarocks busted $(FILE)
 
-# Check if luarocks is installed
-install-luarocks:
-	@if ! command -v luarocks >/dev/null 2>&1; then \
-		echo "Error: luarocks is not installed."; \
-		echo ""; \
-		echo "Install luarocks:"; \
-		echo "  macOS:  brew install luarocks"; \
-		echo "  Linux:  sudo apt install luarocks"; \
-		echo ""; \
-		exit 1; \
-	fi
-	@echo "✓ luarocks is installed."
-
-# Run linter (requires selene or luacheck)
+# Run linter
 lint:
-	@if command -v selene >/dev/null 2>&1; then \
-		selene lua/; \
-	elif command -v luacheck >/dev/null 2>&1; then \
-		luacheck lua/; \
-	else \
-		echo "No linter found. Install selene or luacheck."; \
-		exit 1; \
-	fi
+	eval $$(./luarocks path) && luacheck lua/
 
-# Format code (requires stylua)
+# Format code
 format:
-	@if command -v stylua >/dev/null 2>&1; then \
-		stylua lua/ spec/; \
-	else \
-		echo "stylua not found. Install it with: cargo install stylua"; \
-		exit 1; \
-	fi
+	@stylua lua/ spec/
 
 # Check formatting
 check:
-	@if command -v stylua >/dev/null 2>&1; then \
-		stylua --check lua/ spec/; \
-	else \
-		echo "stylua not found. Install it with: cargo install stylua"; \
-		exit 1; \
-	fi
+	@stylua --check lua/ spec/

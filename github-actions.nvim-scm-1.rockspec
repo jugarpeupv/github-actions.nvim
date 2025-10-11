@@ -23,6 +23,10 @@ dependencies = {
   "lua >= 5.1",
 }
 
+build_dependencies = {
+  "luacheck >= 0.23.0",
+}
+
 test_dependencies = {
   "nlua",
 }
