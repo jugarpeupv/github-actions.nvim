@@ -1,0 +1,6 @@
+{
+  "tag_name": "v5.0.0",
+  "name": "v5.0.0",
+  "published_at": "2025-08-11T12:39:13Z",
+  "body": "## What's Changed\r\n* Update actions checkout to use node 24 by @salmanmkc in https://github.com/actions/checkout/pull/2226\r\n* Prepare v5.0.0 release by @salmanmkc in https://github.com/actions/checkout/pull/2238\r\n\r\n## ⚠️ Minimum Compatible Runner Version\r\n\r\n**v2.327.1**  \r\n[Release Notes](https://github.com/actions/runner/releases/tag/v2.327.1)\r\n\r\nMake sure your runner is updated to this version or newer to use this release.\r\n\r\n**Full Changelog**: https://github.com/actions/checkout/compare/v4...v5.0.0"
+}
