@@ -6,13 +6,9 @@ dofile('spec/minimal_init.lua')
 local helpers = require('spec.helpers.buffer_spec')
 
 describe('workflow parser', function()
-  local parser
+  local parser = require('github-actions.parser.workflow')
 
-  before_each(function()
-    parser = require('github-actions.parser.workflow')
-  end)
-
-  describe('parse_buffer', function()
+  describe('parse', function()
     it('should extract actions from workflow file', function()
       local test_cases = {
         {
@@ -138,7 +134,7 @@ jobs:
 
       for _, tc in ipairs(test_cases) do
         local bufnr = helpers.create_yaml_buffer(tc.content)
-        local actions = parser.parse_buffer(bufnr)
+        local actions = parser.parse(bufnr)
 
         assert.equals(#tc.expected, #actions, tc.name .. ': action count mismatch')
 
@@ -177,7 +173,7 @@ jobs:
 ]]
       local bufnr = helpers.create_yaml_buffer(content)
 
-      local actions = parser.parse_buffer(bufnr)
+      local actions = parser.parse(bufnr)
 
       assert.equals(0, #actions)
 
@@ -185,7 +181,7 @@ jobs:
     end)
 
     it('should handle invalid buffer', function()
-      local actions = parser.parse_buffer(999999)
+      local actions = parser.parse(999999)
 
       assert.equals(0, #actions)
     end)

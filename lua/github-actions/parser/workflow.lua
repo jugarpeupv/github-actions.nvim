@@ -12,7 +12,7 @@ local M = {}
 ---Parse a buffer and extract GitHub Actions
 ---@param bufnr number Buffer number to parse
 ---@return Action[] List of actions found in the buffer
-function M.parse_buffer(bufnr)
+function M.parse(bufnr)
   -- Validate buffer
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return {}
