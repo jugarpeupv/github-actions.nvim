@@ -35,7 +35,6 @@ require('github-actions').setup()
 -- Or customize if needed:
 -- require('github-actions').setup({
 --   virtual_text = {
---     prefix = ' >> ',
 --     icons = {
 --       outdated = '⚠',
 --       latest = '✓',

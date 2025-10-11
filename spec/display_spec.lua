@@ -198,40 +198,6 @@ jobs:
   end)
 
   describe('custom options', function()
-    it('should use custom prefix and suffix', function()
-      local version_info = {
-        line = 4,
-        col = 12,
-        current_version = 'v4',
-        latest_version = '4.0.0',
-        is_latest = true,
-      }
-
-      local opts = {
-        prefix = '>>',
-        suffix = '<<',
-      }
-
-      display.set_virtual_text(test_bufnr, version_info, opts)
-
-      local ns = display.get_namespace()
-      local marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, { details = true })
-      local virt_text = marks[1][4].virt_text
-      if not virt_text then
-        error(vim.inspect(marks))
-      end
-
-      -- Check for custom prefix
-      local has_prefix = false
-      for _, chunk in ipairs(virt_text) do
-        if chunk[1] == '>>' then
-          has_prefix = true
-          break
-        end
-      end
-      assert.is_true(has_prefix, 'should contain custom prefix')
-    end)
-
     it('should use custom icons', function()
       local version_info = {
         line = 4,

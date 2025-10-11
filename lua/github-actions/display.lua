@@ -13,8 +13,6 @@
 ---@field latest? string Icon for latest versions (default: " ")
 
 ---@class VirtualTextOptions
----@field prefix? string Prefix before version text (default: " ")
----@field suffix? string Suffix after version text (default: "")
 ---@field icons? VirtualTextIcons Icons for version status
 ---@field highlight? string Default highlight group (default: "Comment")
 ---@field highlight_latest? string Highlight for latest (default: "GitHubActionsVersionLatest")
@@ -31,8 +29,6 @@ local namespace_id = nil
 -- Default options based on docs/design.md
 ---@type VirtualTextOptions
 M.default_options = {
-  prefix = ' ',
-  suffix = '',
   icons = {
     outdated = ' ',
     latest = ' ',
@@ -63,12 +59,6 @@ local function merge_opts(opts)
 
   local merged = vim.deepcopy(M.default_options)
 
-  if opts.prefix ~= nil then
-    merged.prefix = opts.prefix
-  end
-  if opts.suffix ~= nil then
-    merged.suffix = opts.suffix
-  end
   if opts.icons then
     if opts.icons.outdated ~= nil then
       merged.icons.outdated = opts.icons.outdated
@@ -105,19 +95,9 @@ local function build_virt_text(version_info, opts)
   -- Add icon
   table.insert(virt_text, { icon, icon_hl })
 
-  -- Add prefix
-  if opts.prefix ~= '' then
-    table.insert(virt_text, { opts.prefix, opts.highlight })
-  end
-
   -- Add version
   if version_info.latest_version then
-    table.insert(virt_text, { version_info.latest_version, version_hl })
-  end
-
-  -- Add suffix
-  if opts.suffix ~= '' then
-    table.insert(virt_text, { opts.suffix, opts.highlight })
+    table.insert(virt_text, { ' ' .. version_info.latest_version, version_hl })
   end
 
   return virt_text
