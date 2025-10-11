@@ -1,0 +1,172 @@
+---@class VersionInfo
+---@field line number The 0-indexed line number in the buffer
+---@field col number The 0-indexed column number in the buffer
+---@field current_version? string The current version used (e.g., "v3", "main")
+---@field current_hash? string The current commit hash if used
+---@field latest_version? string The latest available version
+---@field latest_hash? string The latest commit hash
+---@field is_latest boolean Whether the current version is the latest
+---@field error? string Error message if version check failed
+
+---@class VirtualTextOptions
+---@field prefix? string Prefix before version text (default: " ")
+---@field suffix? string Suffix after version text (default: "")
+---@field icons? table Icons for version status
+---@field highlight? string Default highlight group (default: "Comment")
+---@field highlight_latest? string Highlight for latest (default: "GitHubActionsVersionLatest")
+---@field highlight_outdated? string Highlight for outdated (default: "GitHubActionsVersionOutdated")
+
+---@class VirtualText
+local M = {}
+
+-- Namespace for virtual text
+local namespace_id = nil
+
+-- Default options based on docs/design.md
+local default_opts = {
+  prefix = ' ',
+  suffix = '',
+  icons = {
+    outdated = ' ',
+    latest = ' ',
+  },
+  highlight = 'Comment',
+  highlight_latest = 'GitHubActionsVersionLatest',
+  highlight_outdated = 'GitHubActionsVersionOutdated',
+  highlight_icon_latest = 'GitHubActionsIconLatest',
+  highlight_icon_outdated = 'GitHubActionsIconOutdated',
+}
+
+---Get or create the namespace for virtual text
+---@return number namespace_id
+function M.get_namespace()
+  if namespace_id == nil then
+    namespace_id = vim.api.nvim_create_namespace('github_actions_virtual_text')
+  end
+  return namespace_id
+end
+
+---Merge user options with defaults
+---@param opts? VirtualTextOptions User options
+---@return table merged_opts
+local function merge_opts(opts)
+  if not opts then
+    return vim.deepcopy(default_opts)
+  end
+
+  local merged = vim.deepcopy(default_opts)
+
+  if opts.prefix ~= nil then
+    merged.prefix = opts.prefix
+  end
+  if opts.suffix ~= nil then
+    merged.suffix = opts.suffix
+  end
+  if opts.icons then
+    if opts.icons.outdated ~= nil then
+      merged.icons.outdated = opts.icons.outdated
+    end
+    if opts.icons.latest ~= nil then
+      merged.icons.latest = opts.icons.latest
+    end
+  end
+  if opts.highlight then
+    merged.highlight = opts.highlight
+  end
+  if opts.highlight_latest then
+    merged.highlight_latest = opts.highlight_latest
+  end
+  if opts.highlight_outdated then
+    merged.highlight_outdated = opts.highlight_outdated
+  end
+
+  return merged
+end
+
+---Build virtual text chunks
+---@param version_info VersionInfo Version information
+---@param opts table Merged options
+---@return table virt_text Array of [text, highlight] tuples
+local function build_virt_text(version_info, opts)
+  local virt_text = {}
+
+  -- Determine icon and highlights based on is_latest
+  local icon = version_info.is_latest and opts.icons.latest or opts.icons.outdated
+  local icon_hl = version_info.is_latest and opts.highlight_icon_latest or opts.highlight_icon_outdated
+  local version_hl = version_info.is_latest and opts.highlight_latest or opts.highlight_outdated
+
+  -- Add icon
+  table.insert(virt_text, { icon, icon_hl })
+
+  -- Add prefix
+  if opts.prefix ~= '' then
+    table.insert(virt_text, { opts.prefix, opts.highlight })
+  end
+
+  -- Add version
+  if version_info.latest_version then
+    table.insert(virt_text, { version_info.latest_version, version_hl })
+  end
+
+  -- Add suffix
+  if opts.suffix ~= '' then
+    table.insert(virt_text, { opts.suffix, opts.highlight })
+  end
+
+  return virt_text
+end
+
+---Set virtual text for a single action in a buffer
+---@param bufnr number Buffer number
+---@param version_info VersionInfo Version information for the action
+---@param opts? VirtualTextOptions Display options
+function M.set_virtual_text(bufnr, version_info, opts)
+  -- Validate buffer
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  local merged_opts = merge_opts(opts)
+  local ns = M.get_namespace()
+
+  -- Build virtual text
+  local virt_text = build_virt_text(version_info, merged_opts)
+
+  -- Set extmark
+  vim.api.nvim_buf_set_extmark(bufnr, ns, version_info.line, 0, {
+    virt_text = virt_text,
+    virt_text_pos = 'eol',
+    priority = vim.highlight.priorities.user,
+    right_gravity = true,
+  })
+end
+
+---Set virtual text for multiple actions in a buffer
+---@param bufnr number Buffer number
+---@param version_infos VersionInfo[] List of version information
+---@param opts? VirtualTextOptions Display options
+function M.set_virtual_texts(bufnr, version_infos, opts)
+  -- Validate buffer
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  -- Set virtual text for each version info
+  for _, version_info in ipairs(version_infos) do
+    M.set_virtual_text(bufnr, version_info, opts)
+  end
+end
+
+---Clear all virtual text from a buffer
+---@param bufnr number Buffer number
+function M.clear_virtual_text(bufnr)
+  -- Validate buffer
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  local ns = M.get_namespace()
+  vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+end
+
+return M
