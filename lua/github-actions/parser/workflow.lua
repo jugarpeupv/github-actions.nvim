@@ -26,16 +26,33 @@ function M.parse_buffer(bufnr)
   end
 
   local parser = vim.treesitter.get_parser(bufnr, 'yaml')
+  if parser == nil then
+    return {}
+  end
   local tree = parser:parse()[1]
   local root = tree:root()
 
   -- Query for 'uses:' fields in workflow files
+  -- Only match uses within steps (block_sequence under 'steps' key)
   local query = vim.treesitter.query.parse(
     'yaml',
     [[
     (block_mapping_pair
-      key: (flow_node) @key (#eq? @key "uses")
-      value: (flow_node) @value)
+      key: (flow_node) @steps_key (#eq? @steps_key "steps")
+      value: (block_node
+        (block_sequence
+          (block_sequence_item
+            (block_node
+              (block_mapping
+                (block_mapping_pair
+                  key: (flow_node) @key (#eq? @key "uses")
+                  value: (flow_node) @value)
+               )
+              )
+            )
+          )
+        )
+      )
   ]]
   )
 
@@ -70,7 +87,7 @@ function M.parse_buffer(bufnr)
         }
 
         -- Determine if ref is a hash (40 hex characters) or version
-        if ref:match('^%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x$') then
+        if ref:match('^%x+$') and #ref == 40 then
           action.hash = ref
           -- If there's a version in comment, use it
           if comment then

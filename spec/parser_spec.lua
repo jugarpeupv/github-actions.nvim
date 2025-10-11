@@ -113,6 +113,27 @@ jobs:
             },
           },
         },
+        {
+          name = 'should ignore uses outside of steps',
+          content = [[
+name: Test Workflow
+
+on:
+  workflow_call:
+    # This is invalid - 'uses' at workflow level (should be ignored)
+    uses: actions/checkout@v3
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    uses: actions/checkout@v3 # This is invalid - 'uses' at workflow level (should be ignored)
+    steps:
+      - uses: actions/setup-node@v4
+]],
+          expected = {
+            { owner = 'actions', repo = 'setup-node', version = 'v4', line = 12 },
+          },
+        },
       }
 
       for _, tc in ipairs(test_cases) do
