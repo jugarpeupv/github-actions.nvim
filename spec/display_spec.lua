@@ -16,6 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v4
+      - uses: actions/cache@v3
+      - uses: actions/upload-artifact@v2
+      - uses: actions/download-artifact@v2
 ]])
 
   after_each(function()
@@ -274,6 +277,76 @@ jobs:
       assert.has.no.errors(function()
         display.show_versions(999999, version_infos)
       end)
+    end)
+  end)
+
+  describe('extmark lifecycle', function()
+    it('should remove extmarks when action line is deleted', function()
+      -- Initial setup: show version info on line 5
+      local version_infos = {
+        {
+          line = 5,
+          col = 12,
+          current_version = 'v3',
+          latest_version = 'v4.0.0',
+          is_latest = false,
+        },
+      }
+
+      display.show_versions(test_bufnr, version_infos)
+
+      local ns = display.get_namespace()
+      local marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, {})
+      assert.equals(1, #marks, 'should have one extmark initially')
+
+      -- Simulate: action line is deleted, parser returns empty list
+      -- In real usage, this is triggered by TextChanged/BufWritePost autocmds
+      local empty_version_infos = {}
+      display.show_versions(test_bufnr, empty_version_infos)
+
+      -- Extmark should be removed because show_versions clears all extmarks first
+      marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, {})
+      assert.equals(0, #marks, 'should have no extmarks after action is deleted')
+    end)
+
+    it('should not leave extmarks on old line when action moves', function()
+      -- Initial setup: action on line 5
+      local version_infos_before = {
+        {
+          line = 5,
+          col = 12,
+          current_version = 'v3',
+          latest_version = 'v4.0.0',
+          is_latest = false,
+        },
+      }
+
+      display.show_versions(test_bufnr, version_infos_before)
+
+      local ns = display.get_namespace()
+      local marks_before = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, {})
+      assert.equals(1, #marks_before, 'should have one extmark initially')
+      assert.equals(5, marks_before[1][2], 'extmark should be on line 5')
+
+      -- Simulate: action moved to line 8
+      -- In real usage, this is triggered by TextChanged/BufWritePost autocmds
+      local version_infos_after = {
+        {
+          line = 8,
+          col = 12,
+          current_version = 'v3',
+          latest_version = 'v4.0.0',
+          is_latest = false,
+        },
+      }
+
+      display.show_versions(test_bufnr, version_infos_after)
+
+      -- Should have only one extmark on the new line
+      -- show_versions clears all old extmarks and creates new ones
+      local marks_after = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, {})
+      assert.equals(1, #marks_after, 'should have one extmark after move')
+      assert.equals(8, marks_after[1][2], 'extmark should be on line 8, not old line 5')
     end)
   end)
 end)
