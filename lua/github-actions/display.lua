@@ -14,7 +14,6 @@
 
 ---@class VirtualTextOptions
 ---@field icons? VirtualTextIcons Icons for version status
----@field highlight? string Default highlight group (default: "Comment")
 ---@field highlight_latest? string Highlight for latest (default: "GitHubActionsVersionLatest")
 ---@field highlight_outdated? string Highlight for outdated (default: "GitHubActionsVersionOutdated")
 ---@field highlight_icon_latest? string Highlight for latest icon (default: "GitHubActionsIconLatest")
@@ -33,7 +32,6 @@ M.default_options = {
     outdated = ' ',
     latest = ' ',
   },
-  highlight = 'Comment',
   highlight_latest = 'GitHubActionsVersionLatest',
   highlight_outdated = 'GitHubActionsVersionOutdated',
   highlight_icon_latest = 'GitHubActionsIconLatest',
@@ -66,9 +64,6 @@ local function merge_opts(opts)
     if opts.icons.latest ~= nil then
       merged.icons.latest = opts.icons.latest
     end
-  end
-  if opts.highlight then
-    merged.highlight = opts.highlight
   end
   if opts.highlight_latest then
     merged.highlight_latest = opts.highlight_latest
