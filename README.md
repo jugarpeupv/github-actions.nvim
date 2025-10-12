@@ -2,7 +2,7 @@
 
 A Neovim plugin that checks GitHub Actions versions and displays them inline using extmarks.
 
-In the future, we plan to implement github actions execution and watch.
+<img width="923" height="534" alt="image" src="https://github.com/user-attachments/assets/47128a5b-f0d7-4f67-a226-238aa7e876a2" />
 
 ## Features
 
