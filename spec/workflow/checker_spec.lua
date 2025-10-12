@@ -7,12 +7,11 @@ local helpers = require('spec.helpers.buffer_spec')
 
 describe('workflow.checker', function()
   ---@type WorkflowChecker
-  local checker
+  local checker = require('github-actions.workflow.checker')
   ---@type number
   local test_bufnr
 
   before_each(function()
-    checker = require('github-actions.workflow.checker')
     test_bufnr = helpers.create_yaml_buffer([[\
 name: Test Workflow
 
@@ -32,10 +31,6 @@ jobs:
   end)
 
   describe('check_versions', function()
-    it('should exist and be callable', function()
-      assert.equals('function', type(checker.check_versions))
-    end)
-
     it('should return error for invalid buffer', function()
       local callback_called = false
       checker.check_versions(999999, function(version_infos, error)
@@ -73,7 +68,7 @@ jobs:
       -- This test verifies the function signature and basic flow
       -- Actual API calls would require mocking
       assert.has.no.errors(function()
-        checker.check_versions(test_bufnr, function(version_infos, error)
+        checker.check_versions(test_bufnr, function(version_infos, _)
           -- Callback should be called eventually
           assert.equals('table', type(version_infos or {}))
         end)

@@ -7,11 +7,7 @@ local fixture = require('spec.helpers.fixture')
 
 describe('github', function()
   ---@type Github
-  local github
-
-  before_each(function()
-    github = require('github-actions.github')
-  end)
+  local github = require('github-actions.github')
 
   describe('parse_response', function()
     it('should parse valid JSON response', function()
