@@ -22,11 +22,11 @@ jobs:
 ]])
 
   after_each(function()
-    display.clear_virtual_text(test_bufnr)
+    display.clear_version_text(test_bufnr)
   end)
 
-  describe('set_virtual_text', function()
-    it('should set virtual text for latest version', function()
+  describe('set_version_text', function()
+    it('should set version text for latest version', function()
       local version_info = {
         line = 4,
         col = 12,
@@ -35,7 +35,7 @@ jobs:
         is_latest = true,
       }
 
-      display.set_virtual_text(test_bufnr, version_info)
+      display.set_version_text(test_bufnr, version_info)
 
       -- Get extmarks to verify virtual text was set
       local ns = display.get_namespace()
@@ -68,7 +68,7 @@ jobs:
       -- Check for icon (first element)
       -- virt_text[1] = {text, highlight_group}
       local icon_text = virt_text[1][1]
-      assert.equals(' ', icon_text, 'should have latest icon')
+      assert.equals('', icon_text, 'should have latest icon')
 
       -- Find version text (should contain '4.0.0')
       local has_version = false
@@ -82,7 +82,7 @@ jobs:
       assert.is_true(has_version, 'should contain version 4.0.0')
     end)
 
-    it('should set virtual text for outdated version', function()
+    it('should set version text for outdated version', function()
       local version_info = {
         line = 4,
         col = 12,
@@ -91,7 +91,7 @@ jobs:
         is_latest = false,
       }
 
-      display.set_virtual_text(test_bufnr, version_info)
+      display.set_version_text(test_bufnr, version_info)
 
       local ns = display.get_namespace()
       local marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, { details = true })
@@ -106,7 +106,7 @@ jobs:
 
       -- Check for outdated icon
       local icon_text = virt_text[1][1]
-      assert.equals(' ', icon_text, 'should have outdated icon')
+      assert.equals('', icon_text, 'should have outdated icon')
     end)
 
     it('should handle invalid buffer gracefully', function()
@@ -120,13 +120,48 @@ jobs:
 
       -- Should not throw error with invalid buffer
       assert.has.no.errors(function()
-        display.set_virtual_text(999999, version_info)
+        display.set_version_text(999999, version_info)
       end)
+    end)
+
+    it('should display error message when error field is present', function()
+      local version_info = {
+        line = 4,
+        col = 12,
+        error = 'Failed to fetch version',
+      }
+
+      display.set_version_text(test_bufnr, version_info)
+
+      local ns = display.get_namespace()
+      local marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, { details = true })
+
+      assert.equals(1, #marks, 'should have one extmark')
+
+      local mark = marks[1]
+      local virt_text = mark[4].virt_text
+      if not virt_text then
+        error(vim.inspect(mark[4]))
+      end
+
+      -- Check for error icon
+      local icon_text = virt_text[1][1]
+      assert.equals('', icon_text, 'should have error icon')
+
+      -- Check that error message is displayed
+      local has_error_msg = false
+      for _, chunk in ipairs(virt_text) do
+        if chunk[1]:match('Failed to fetch version') then
+          has_error_msg = true
+          break
+        end
+      end
+      assert.is_true(has_error_msg, 'should contain error message')
     end)
   end)
 
-  describe('set_virtual_texts', function()
-    it('should set multiple virtual texts', function()
+  describe('set_version_texts', function()
+    it('should set multiple version texts', function()
       local version_infos = {
         {
           line = 4,
@@ -144,7 +179,7 @@ jobs:
         },
       }
 
-      display.set_virtual_texts(test_bufnr, version_infos)
+      display.set_version_texts(test_bufnr, version_infos)
 
       local ns = display.get_namespace()
       local marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, { details = true })
@@ -158,7 +193,7 @@ jobs:
 
     it('should handle empty version_infos array', function()
       assert.has.no.errors(function()
-        display.set_virtual_texts(test_bufnr, {})
+        display.set_version_texts(test_bufnr, {})
       end)
 
       local ns = display.get_namespace()
@@ -168,8 +203,8 @@ jobs:
     end)
   end)
 
-  describe('clear_virtual_text', function()
-    it('should clear all virtual text from buffer', function()
+  describe('clear_version_text', function()
+    it('should clear all version text from buffer', function()
       local version_info = {
         line = 4,
         col = 12,
@@ -178,7 +213,7 @@ jobs:
         is_latest = false,
       }
 
-      display.set_virtual_text(test_bufnr, version_info)
+      display.set_version_text(test_bufnr, version_info)
 
       -- Verify mark exists
       local ns = display.get_namespace()
@@ -186,7 +221,7 @@ jobs:
       assert.equals(1, #marks_before, 'should have one mark before clear')
 
       -- Clear
-      display.clear_virtual_text(test_bufnr)
+      display.clear_version_text(test_bufnr)
 
       -- Verify marks are cleared
       local marks_after = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, {})
@@ -195,7 +230,7 @@ jobs:
 
     it('should handle invalid buffer gracefully', function()
       assert.has.no.errors(function()
-        display.clear_virtual_text(999999)
+        display.clear_version_text(999999)
       end)
     end)
   end)
@@ -217,7 +252,7 @@ jobs:
         },
       }
 
-      display.set_virtual_text(test_bufnr, version_info, opts)
+      display.set_version_text(test_bufnr, version_info, opts)
 
       local ns = display.get_namespace()
       local marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, { details = true })

@@ -68,4 +68,37 @@ describe('github', function()
       assert.equals('boolean', type(available))
     end)
   end)
+
+  describe('extract_latest_tag', function()
+    it('should extract latest tag from tags data', function()
+      local json_str = fixture.load('gh_api_tags_success')
+      local data = github.parse_response(json_str)
+      local version = github.extract_latest_tag(data)
+
+      assert.is_not_nil(version)
+      assert.equals('v1.0.1', version)
+    end)
+
+    it('should handle empty tags array', function()
+      local data = {}
+      local version = github.extract_latest_tag(data)
+
+      assert.is_nil(version)
+    end)
+
+    it('should handle nil data', function()
+      local version = github.extract_latest_tag(nil)
+
+      assert.is_nil(version)
+    end)
+
+    it('should handle tags without name field', function()
+      local data = {
+        { commit = { sha = 'abc123' } },
+      }
+      local version = github.extract_latest_tag(data)
+
+      assert.is_nil(version)
+    end)
+  end)
 end)

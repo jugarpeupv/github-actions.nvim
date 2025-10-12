@@ -11,13 +11,16 @@
 ---@class VirtualTextIcons
 ---@field outdated? string Icon for outdated versions (default: " ")
 ---@field latest? string Icon for latest versions (default: " ")
+---@field error? string Icon for errors (default: " ")
 
 ---@class VirtualTextOptions
 ---@field icons? VirtualTextIcons Icons for version status
 ---@field highlight_latest? string Highlight for latest (default: "GitHubActionsVersionLatest")
 ---@field highlight_outdated? string Highlight for outdated (default: "GitHubActionsVersionOutdated")
+---@field highlight_error? string Highlight for errors (default: "GitHubActionsVersionError")
 ---@field highlight_icon_latest? string Highlight for latest icon (default: "GitHubActionsIconLatest")
 ---@field highlight_icon_outdated? string Highlight for outdated icon (default: "GitHubActionsIconOutdated")
+---@field highlight_icon_error? string Highlight for error icon (default: "GitHubActionsIconError")
 
 ---@class Display
 local M = {}
@@ -31,11 +34,14 @@ M.default_options = {
   icons = {
     outdated = '',
     latest = '',
+    error = '',
   },
   highlight_latest = 'GitHubActionsVersionLatest',
   highlight_outdated = 'GitHubActionsVersionOutdated',
+  highlight_error = 'GitHubActionsVersionError',
   highlight_icon_latest = 'GitHubActionsIconLatest',
   highlight_icon_outdated = 'GitHubActionsIconOutdated',
+  highlight_icon_error = 'GitHubActionsIconError',
 }
 
 ---Get or create the namespace for virtual text
@@ -64,12 +70,18 @@ local function merge_opts(opts)
     if opts.icons.latest ~= nil then
       merged.icons.latest = opts.icons.latest
     end
+    if opts.icons.error ~= nil then
+      merged.icons.error = opts.icons.error
+    end
   end
   if opts.highlight_latest then
     merged.highlight_latest = opts.highlight_latest
   end
   if opts.highlight_outdated then
     merged.highlight_outdated = opts.highlight_outdated
+  end
+  if opts.highlight_error then
+    merged.highlight_error = opts.highlight_error
   end
 
   return merged
@@ -81,6 +93,13 @@ end
 ---@return table virt_text Array of [text, highlight] tuples
 local function build_virt_text(version_info, opts)
   local virt_text = {}
+
+  -- Handle error case
+  if version_info.error then
+    table.insert(virt_text, { opts.icons.error, opts.highlight_icon_error })
+    table.insert(virt_text, { ' ' .. version_info.error, opts.highlight_error })
+    return virt_text
+  end
 
   -- Determine icon and highlights based on is_latest
   local icon = version_info.is_latest and opts.icons.latest or opts.icons.outdated
@@ -98,11 +117,11 @@ local function build_virt_text(version_info, opts)
   return virt_text
 end
 
----Set virtual text for a single action in a buffer
+---Set version text for a single action in a buffer
 ---@param bufnr number Buffer number
 ---@param version_info VersionInfo Version information for the action
 ---@param opts? VirtualTextOptions Display options
-function M.set_virtual_text(bufnr, version_info, opts)
+function M.set_version_text(bufnr, version_info, opts)
   -- Validate buffer
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
@@ -123,25 +142,25 @@ function M.set_virtual_text(bufnr, version_info, opts)
   })
 end
 
----Set virtual text for multiple actions in a buffer
+---Set version text for multiple actions in a buffer
 ---@param bufnr number Buffer number
 ---@param version_infos VersionInfo[] List of version information
 ---@param opts? VirtualTextOptions Display options
-function M.set_virtual_texts(bufnr, version_infos, opts)
+function M.set_version_texts(bufnr, version_infos, opts)
   -- Validate buffer
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
 
-  -- Set virtual text for each version info
+  -- Set version text for each version info
   for _, version_info in ipairs(version_infos) do
-    M.set_virtual_text(bufnr, version_info, opts)
+    M.set_version_text(bufnr, version_info, opts)
   end
 end
 
----Clear all virtual text from a buffer
+---Clear all version text from a buffer
 ---@param bufnr number Buffer number
-function M.clear_virtual_text(bufnr)
+function M.clear_version_text(bufnr)
   -- Validate buffer
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
@@ -161,12 +180,12 @@ function M.show_versions(bufnr, version_infos, opts)
     return
   end
 
-  -- Clear existing virtual text
-  M.clear_virtual_text(bufnr)
+  -- Clear existing version text
+  M.clear_version_text(bufnr)
 
   -- Display new version infos
   if version_infos and #version_infos > 0 then
-    M.set_virtual_texts(bufnr, version_infos, opts)
+    M.set_version_texts(bufnr, version_infos, opts)
   end
 end
 

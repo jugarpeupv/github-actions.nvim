@@ -29,6 +29,22 @@ function M.extract_version(data)
   return data.tag_name
 end
 
+---Extract latest tag from tags array data
+---@param data table|nil Parsed tags array data from GitHub API
+---@return string|nil version The first tag name (e.g., "v1.0.1") or nil
+function M.extract_latest_tag(data)
+  if not data or type(data) ~= 'table' or #data == 0 then
+    return nil
+  end
+
+  local first_tag = data[1]
+  if not first_tag or type(first_tag) ~= 'table' then
+    return nil
+  end
+
+  return first_tag.name
+end
+
 ---Check if gh command is available
 ---@return boolean available True if gh command exists
 function M.is_available()
@@ -36,17 +52,17 @@ function M.is_available()
   return result == 1
 end
 
----Fetch latest release for an action from GitHub
+---Fetch latest tag for an action from GitHub
 ---@param owner string Repository owner (e.g., "actions")
 ---@param repo string Repository name (e.g., "checkout")
 ---@param callback fun(version: string|nil, error: string|nil) Callback function with version string or error
-function M.fetch_latest_release(owner, repo, callback)
+function M.fetch_latest_tag(owner, repo, callback)
   if not M.is_available() then
     callback(nil, 'gh command not found')
     return
   end
 
-  local api_path = string.format('repos/%s/%s/releases/latest', owner, repo)
+  local api_path = string.format('repos/%s/%s/tags', owner, repo)
 
   vim.system({ 'gh', 'api', api_path }, {}, function(result)
     if result.code ~= 0 then
@@ -60,13 +76,50 @@ function M.fetch_latest_release(owner, repo, callback)
       return
     end
 
-    local version = M.extract_version(data)
+    local version = M.extract_latest_tag(data)
     if not version then
       callback(nil, 'Failed to extract version from response')
       return
     end
 
     callback(version, nil)
+  end)
+end
+
+---Fetch latest release for an action from GitHub
+---Falls back to tags if no release exists
+---@param owner string Repository owner (e.g., "actions")
+---@param repo string Repository name (e.g., "checkout")
+---@param callback fun(version: string|nil, error: string|nil) Callback function with version string or error
+function M.fetch_latest_release(owner, repo, callback)
+  if not M.is_available() then
+    callback(nil, 'gh command not found')
+    return
+  end
+
+  local api_path = string.format('repos/%s/%s/releases/latest', owner, repo)
+
+  vim.system({ 'gh', 'api', api_path }, {}, function(result)
+    -- If release exists, use it
+    if result.code == 0 then
+      local data, parse_err = M.parse_response(result.stdout)
+      if parse_err then
+        callback(nil, parse_err)
+        return
+      end
+
+      local version = M.extract_version(data)
+      if not version then
+        callback(nil, 'Failed to extract version from response')
+        return
+      end
+
+      callback(version, nil)
+      return
+    end
+
+    -- Fallback to tags if release doesn't exist
+    M.fetch_latest_tag(owner, repo, callback)
   end)
 end
 

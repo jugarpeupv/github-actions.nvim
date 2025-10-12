@@ -1,0 +1,32 @@
+[
+  {
+    "name": "v1.0.1",
+    "zipball_url": "https://api.github.com/repos/giraffate/clippy-action/zipball/refs/tags/v1.0.1",
+    "tarball_url": "https://api.github.com/repos/giraffate/clippy-action/tarball/refs/tags/v1.0.1",
+    "commit": {
+      "sha": "13b9d32482f25d29ead141b79e7e04e7900281e0",
+      "url": "https://api.github.com/repos/giraffate/clippy-action/commits/13b9d32482f25d29ead141b79e7e04e7900281e0"
+    },
+    "node_id": "REF_kwDOIWWA7bByZWZzL3RhZ3MvdjEuMC4x"
+  },
+  {
+    "name": "v1.0.0",
+    "zipball_url": "https://api.github.com/repos/giraffate/clippy-action/zipball/refs/tags/v1.0.0",
+    "tarball_url": "https://api.github.com/repos/giraffate/clippy-action/tarball/refs/tags/v1.0.0",
+    "commit": {
+      "sha": "a6030db3b8bde89e5316ff1adb2a0d8954c2ff40",
+      "url": "https://api.github.com/repos/giraffate/clippy-action/commits/a6030db3b8bde89e5316ff1adb2a0d8954c2ff40"
+    },
+    "node_id": "REF_kwDOIWWA7bByZWZzL3RhZ3MvdjEuMC4w"
+  },
+  {
+    "name": "v1",
+    "zipball_url": "https://api.github.com/repos/giraffate/clippy-action/zipball/refs/tags/v1",
+    "tarball_url": "https://api.github.com/repos/giraffate/clippy-action/tarball/refs/tags/v1",
+    "commit": {
+      "sha": "13b9d32482f25d29ead141b79e7e04e7900281e0",
+      "url": "https://api.github.com/repos/giraffate/clippy-action/commits/13b9d32482f25d29ead141b79e7e04e7900281e0"
+    },
+    "node_id": "REF_kwDOIWWA7axyZWZzL3RhZ3MvdjE"
+  }
+]

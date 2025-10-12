@@ -6,10 +6,12 @@ local highlights = {
   -- Version text highlights
   GitHubActionsVersionLatest = { fg = '#10d981', default = true }, -- Green
   GitHubActionsVersionOutdated = { fg = '#a855f7', default = true }, -- Purple
+  GitHubActionsVersionError = { fg = '#ef4444', default = true }, -- Red
 
   -- Icon highlights
   GitHubActionsIconLatest = { fg = '#10d981', default = true }, -- Green
   GitHubActionsIconOutdated = { fg = '#a855f7', default = true }, -- Purple
+  GitHubActionsIconError = { fg = '#ef4444', default = true }, -- Red
 }
 
 ---Setup default highlight groups for the plugin
