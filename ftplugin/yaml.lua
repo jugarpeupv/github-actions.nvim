@@ -4,8 +4,14 @@
 local bufnr = vim.api.nvim_get_current_buf()
 local filepath = vim.api.nvim_buf_get_name(bufnr)
 
--- Only run for GitHub Actions workflow files
-if not filepath:match('%.github/workflows/') then
+-- Only run for GitHub Actions workflow and composite action files
+-- Patterns:
+-- - .github/workflows/*.yml or *.yaml (workflow files)
+-- - .github/actions/*/action.yml or action.yaml (composite actions)
+local is_workflow = filepath:match('%.github/workflows/') ~= nil
+local is_composite_action = filepath:match('%.github/actions/.*/action%.ya?ml$') ~= nil
+
+if not (is_workflow or is_composite_action) then
   return
 end
 
