@@ -30,7 +30,8 @@ if vim.fn.isdirectory(treesitter_path) == 1 then
 end
 
 -- Setup the plugin (uses default options from virtual_text.lua)
-require('github-actions').setup()
+local github_actions = require('github-actions')
+github_actions.setup()
 
 -- Or customize if needed:
 -- require('github-actions').setup({
@@ -42,27 +43,14 @@ require('github-actions').setup()
 --   },
 -- })
 
--- Set up keymaps
-vim.keymap.set('n', '<leader>gc', function()
-  require('github-actions').check_versions()
-end, { desc = 'Check GitHub Actions versions' })
-
-vim.keymap.set('n', '<leader>gC', function()
-  local virtual_text = require('github-actions.ui.virtual_text')
-  virtual_text.clear_virtual_text(vim.api.nvim_get_current_buf())
-end, { desc = 'Clear version virtual text' })
-
--- Print helpful message
+-- shoud be called after setup becaude fplugin/yaml.lua check workflow file path
 vim.defer_fn(function()
-  require('github-actions').check_versions()
-end, 100)
+  github_actions.check_versions()
+end, 10)
 
--- Auto-check on buffer write (uses cache for fast updates)
 local bufnr = vim.api.nvim_get_current_buf()
-vim.api.nvim_create_autocmd('BufWritePost', {
+vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI' }, {
   buffer = bufnr,
-  callback = function()
-    require('github-actions').check_versions()
-  end,
-  desc = 'Check GitHub Actions versions after save',
+  callback = github_actions.check_versions,
+  desc = 'Check GitHub Actions versions on text change (debounced)',
 })
