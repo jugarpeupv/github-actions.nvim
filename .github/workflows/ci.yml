@@ -30,10 +30,9 @@ jobs:
             mkdir -p lua_modules
             for dir in bin lib share; do
               target="$HOME/.luarocks/$dir"
-              if [ -d "$target" ]; then
-                rm -rf "lua_modules/$dir"
-                ln -s "$target" "lua_modules/$dir"
-              fi
+              mkdir -p "$target"
+              rm -rf "lua_modules/$dir"
+              ln -s "$target" "lua_modules/$dir"
             done
 
   lint:
