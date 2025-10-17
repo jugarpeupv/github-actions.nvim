@@ -43,7 +43,7 @@ function M.get_version_status(current_version, latest_version)
   local depth = #curr_parts
 
   for i = 1, depth do
-    local curr = curr_parts[i] or 0     -- If current doesn't have this part, assume 0
+    local curr = curr_parts[i] or 0 -- If current doesn't have this part, assume 0
     local latest = latest_parts[i] or 0 -- If latest doesn't have this part, assume 0
 
     if curr < latest then
