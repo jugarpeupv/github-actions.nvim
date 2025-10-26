@@ -1,0 +1,335 @@
+*github-actions.txt* GitHub Actions integration for Neovim
+
+Author: skanehira
+License: MIT
+
+==============================================================================
+CONTENTS                                           *github-actions-contents*
+
+1. Introduction .......................... |github-actions-introduction|
+2. Requirements .......................... |github-actions-requirements|
+3. Installation .......................... |github-actions-installation|
+4. Features .............................. |github-actions-features|
+5. Configuration ......................... |github-actions-configuration|
+6. Commands .............................. |github-actions-commands|
+7. Functions ............................. |github-actions-functions|
+8. Keymaps ............................... |github-actions-keymaps|
+9. Highlights ............................ |github-actions-highlights|
+
+==============================================================================
+1. INTRODUCTION                               *github-actions-introduction*
+
+github-actions.nvim is a Neovim plugin that provides GitHub Actions
+integration directly within your editor. It allows you to:
+
+- Check GitHub Actions versions automatically
+- Dispatch workflows with workflow_dispatch trigger
+- View workflow run history with status, duration, and timestamps
+- View job logs with syntax highlighting and folding
+
+==============================================================================
+2. REQUIREMENTS                               *github-actions-requirements*
+
+- Neovim 0.9+
+- GitHub CLI (gh) installed and authenticated
+  https://cli.github.com/
+- nvim-treesitter with YAML parser
+  https://github.com/nvim-treesitter/nvim-treesitter
+
+==============================================================================
+3. INSTALLATION                               *github-actions-installation*
+
+Using lazy.nvim:
+>lua
+    {
+      'skanehira/github-actions.nvim',
+      dependencies = {
+        'nvim-treesitter/nvim-treesitter',
+      },
+      opts = {},
+    }
+<
+
+==============================================================================
+4. FEATURES                                       *github-actions-features*
+
+4.1 Version Checking~
+
+The plugin automatically activates when you open:
+- `.github/workflows/*.yml` or `*.yaml` (workflow files)
+- `.github/actions/*/action.yml` or `*.yaml` (composite actions)
+
+Version information is displayed inline at the end of each line using
+virtual text:
+>
+    - uses: actions/checkout@v4   v5.0.0 (latest)
+    - uses: actions/setup-node@v3   v4.1.0 (outdated)
+<
+
+4.2 Workflow Dispatch~
+
+Dispatch workflows that have the `workflow_dispatch` trigger configured.
+The plugin will:
+1. Parse the workflow file for workflow_dispatch configuration
+2. Prompt you to select a branch
+3. Collect required input parameters
+4. Dispatch the workflow using the GitHub CLI
+
+4.3 Workflow Run History~
+
+View the run history for any workflow file. The history view shows:
+- Run status (success, failure, cancelled, in_progress, queued)
+- Run ID and branch
+- Commit message
+- Timestamp and duration
+
+You can expand runs to view jobs and steps, and view logs for each job.
+
+==============================================================================
+5. CONFIGURATION                             *github-actions-configuration*
+
+5.1 Default Configuration~
+
+The plugin works out of the box with sensible defaults. You can customize
+it using the setup function:
+>lua
+    require('github-actions').setup({
+      actions = {
+        icons = {
+          outdated = '',
+          latest = '',
+          error = '',
+        },
+        highlight_latest = 'GitHubActionsVersionLatest',
+        highlight_outdated = 'GitHubActionsVersionOutdated',
+        highlight_error = 'GitHubActionsVersionError',
+        highlight_icon_latest = 'GitHubActionsIconLatest',
+        highlight_icon_outdated = 'GitHubActionsIconOutdated',
+        highlight_icon_error = 'GitHubActionsIconError',
+      },
+      history = {
+        icons = {
+          success = '✓',
+          failure = '✗',
+          cancelled = '⊘',
+          skipped = '⊘',
+          in_progress = '⊙',
+          queued = '○',
+          waiting = '○',
+          unknown = '?',
+        },
+        highlights = {
+          success = 'GitHubActionsHistorySuccess',
+          failure = 'GitHubActionsHistoryFailure',
+          cancelled = 'GitHubActionsHistoryCancelled',
+          running = 'GitHubActionsHistoryRunning',
+          queued = 'GitHubActionsHistoryQueued',
+          run_id = 'GitHubActionsHistoryRunId',
+          branch = 'GitHubActionsHistoryBranch',
+          time = 'GitHubActionsHistoryTime',
+          job_name = 'GitHubActionsHistoryJobName',
+          step_name = 'GitHubActionsHistoryStepName',
+          tree_prefix = 'GitHubActionsHistoryTreePrefix',
+        },
+        highlight_colors = {
+          success = { fg = '#10b981', bold = true },
+          failure = { fg = '#ef4444', bold = true },
+          cancelled = { fg = '#6b7280', bold = true },
+          running = { fg = '#f59e0b', bold = true },
+          queued = { fg = '#8b5cf6', bold = true },
+        },
+        logs_fold_by_default = true,
+      },
+    })
+<
+
+5.2 Configuration Options~
+
+actions.icons                                   *github-actions-actions-icons*
+    Icons for version checking display.
+
+actions.highlight_*                         *github-actions-actions-highlight*
+    Highlight groups for version information.
+
+history.icons                                   *github-actions-history-icons*
+    Icons for workflow run status.
+
+history.highlights                         *github-actions-history-highlights*
+    Highlight groups for workflow history elements.
+
+history.highlight_colors               *github-actions-history-highlight-colors*
+    Custom highlight options for workflow history elements.
+    Each key accepts a table with highlight options (fg, bg, bold, italic, etc.).
+
+history.logs_fold_by_default       *github-actions-history-logs-fold-by-default*
+    Whether to fold log groups by default. Default: true
+
+==============================================================================
+6. COMMANDS                                       *github-actions-commands*
+
+                                                    *:GithubActionsDispatch*
+:GithubActionsDispatch
+    Dispatch a workflow with workflow_dispatch trigger. If the current buffer
+    is a workflow file, dispatch that workflow. Otherwise, show a selector
+    to choose a workflow file.
+
+    The command will:
+    1. Parse the workflow_dispatch configuration
+    2. Prompt for branch selection
+    3. Collect required input parameters
+    4. Dispatch the workflow using gh CLI
+
+                                                    *:GithubActionsHistory*
+:GithubActionsHistory
+    Show workflow run history. If the current buffer is a workflow file,
+    show its history. Otherwise, show a selector to choose a workflow file.
+
+    The history buffer displays:
+    - Recent workflow runs with status
+    - Run ID, branch, and commit message
+    - Timestamp and duration
+    - Expandable jobs and steps (press <CR>)
+
+==============================================================================
+7. FUNCTIONS                                     *github-actions-functions*
+
+github_actions.setup({opts})                    *github-actions.setup()*
+    Setup the plugin with custom configuration.
+
+    Parameters:~
+        {opts} (table|nil) Configuration options. See |github-actions-configuration|
+
+github_actions.check_versions()                 *github-actions.check_versions()*
+    Check and update version information for the current buffer.
+    Automatically called when opening workflow files.
+
+github_actions.dispatch_workflow()              *github-actions.dispatch_workflow()*
+    Dispatch a workflow. See |:GithubActionsDispatch|
+
+github_actions.show_history()                   *github-actions.show_history()*
+    Show workflow run history. See |:GithubActionsHistory|
+
+github_actions.get_config()                     *github-actions.get_config()*
+    Get the current plugin configuration.
+
+    Returns:~
+        (table) Current configuration
+
+==============================================================================
+8. KEYMAPS                                         *github-actions-keymaps*
+
+8.1 Workflow History Buffer~
+                                                *github-actions-history-buffer*
+
+The workflow history buffer provides these keymaps:
+
+    <CR>        Expand/collapse a workflow run, or view job logs
+                - On a run line: expand to show jobs and steps
+                - On a job line: open log buffer for that job
+
+    <BS>        Collapse the expanded run
+
+    q           Close the history buffer
+
+8.2 Log Buffer~
+                                                    *github-actions-log-buffer*
+
+The log buffer provides these keymaps for navigating logs:
+
+    q           Close the log buffer
+
+    za          Toggle fold (open/close)
+
+    zo          Open fold
+
+    zc          Close fold
+
+8.3 Example Keymap Configuration~
+
+You can set up custom keymaps for the plugin functions:
+>lua
+    {
+      'skanehira/github-actions.nvim',
+      dependencies = {
+        'nvim-treesitter/nvim-treesitter',
+      },
+      keys = {
+        {
+          '<leader>gd',
+          function()
+            require('github-actions').dispatch_workflow()
+          end,
+          desc = 'Dispatch workflow',
+        },
+        {
+          '<leader>gh',
+          function()
+            require('github-actions').show_history()
+          end,
+          desc = 'Show workflow history',
+        },
+      },
+      opts = {},
+    }
+<
+
+==============================================================================
+9. HIGHLIGHTS                                   *github-actions-highlights*
+
+9.1 Version Checking Highlights~
+
+GitHubActionsVersionLatest                *GitHubActionsVersionLatest*
+    Highlight for latest version text
+
+GitHubActionsVersionOutdated              *GitHubActionsVersionOutdated*
+    Highlight for outdated version text
+
+GitHubActionsVersionError                 *GitHubActionsVersionError*
+    Highlight for error version text
+
+GitHubActionsIconLatest                   *GitHubActionsIconLatest*
+    Highlight for latest version icon
+
+GitHubActionsIconOutdated                 *GitHubActionsIconOutdated*
+    Highlight for outdated version icon
+
+GitHubActionsIconError                    *GitHubActionsIconError*
+    Highlight for error version icon
+
+9.2 History Highlights~
+
+GitHubActionsHistorySuccess               *GitHubActionsHistorySuccess*
+    Highlight for successful runs/jobs/steps
+
+GitHubActionsHistoryFailure               *GitHubActionsHistoryFailure*
+    Highlight for failed runs/jobs/steps
+
+GitHubActionsHistoryCancelled             *GitHubActionsHistoryCancelled*
+    Highlight for cancelled runs/jobs/steps
+
+GitHubActionsHistoryRunning               *GitHubActionsHistoryRunning*
+    Highlight for running runs/jobs/steps
+
+GitHubActionsHistoryQueued                *GitHubActionsHistoryQueued*
+    Highlight for queued runs/jobs/steps
+
+GitHubActionsHistoryRunId                 *GitHubActionsHistoryRunId*
+    Highlight for run ID
+
+GitHubActionsHistoryBranch                *GitHubActionsHistoryBranch*
+    Highlight for branch name
+
+GitHubActionsHistoryTime                  *GitHubActionsHistoryTime*
+    Highlight for time information
+
+GitHubActionsHistoryJobName               *GitHubActionsHistoryJobName*
+    Highlight for job name
+
+GitHubActionsHistoryStepName              *GitHubActionsHistoryStepName*
+    Highlight for step name
+
+GitHubActionsHistoryTreePrefix            *GitHubActionsHistoryTreePrefix*
+    Highlight for tree prefix (├─, └─)
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:

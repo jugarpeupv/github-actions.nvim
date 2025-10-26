@@ -89,11 +89,11 @@ require('github-actions').setup({
     },
     -- Optional: customize highlight colors globally
     highlight_colors = {
-      success = '#00ff00',    -- Color for successful runs
-      failure = '#ff0000',    -- Color for failed runs
-      cancelled = '#808080',  -- Color for cancelled runs
-      running = '#ffff00',    -- Color for running runs
-      queued = '#0000ff',     -- Color for queued runs
+      success = { fg = '#10b981', bold = true },     -- Highlight for successful runs
+      failure = { fg = '#ef4444', bold = true },     -- Highlight for failed runs
+      cancelled = { fg = '#6b7280', bold = true },   -- Highlight for cancelled runs
+      running = { fg = '#f59e0b', bold = true },     -- Highlight for running runs
+      queued = { fg = '#8b5cf6', bold = true },      -- Highlight for queued runs
     },
   },
 })
@@ -106,12 +106,21 @@ require('github-actions').setup({
 
 ### Workflow History Usage
 
-1. Press `<CR>` on a workflow run to expand/collapse jobs and steps
-2. Press `<CR>` on a step to view its logs in a new buffer
-3. Press `<BS>` to collapse an expanded run
-4. Press `q` to close the history or log buffer
+#### Run History Buffer
 
-**Log Display**: Logs are automatically formatted to show only timestamps and content, removing redundant job and step name columns for better readability. Format: `[HH:MM:SS] log content`
+1. Press `<CR>` on a workflow run to expand/collapse jobs and steps
+2. Press `<CR>` on a job to view its logs in a new buffer
+3. Press `<BS>` to collapse an expanded run
+4. Press `q` to close the history buffer
+
+#### Log Buffer
+
+1. Press `q` to close the log buffer
+2. Press `za` to toggle fold (open/close)
+3. Press `zo` to open fold
+4. Press `zc` to close fold
+
+**Log Display**: Logs are automatically formatted to show only timestamps and content, removing redundant job and step name columns for better readability. Format: `[HH:MM:SS] log content`. Log groups are foldable for better navigation.
 
 ## Keymaps
 
