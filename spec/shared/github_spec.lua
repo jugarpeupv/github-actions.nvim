@@ -9,7 +9,7 @@ local fixture = require('spec.helpers.fixture')
 
 describe('github', function()
   ---@type Github
-  local github = require('github-actions.github')
+  local github = require('github-actions.shared.github')
 
   describe('parse_response', function()
     it('should parse valid JSON response', function()

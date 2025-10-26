@@ -3,7 +3,7 @@ dofile('spec/minimal_init.lua')
 local buffer_helper = require('spec.helpers.buffer_spec')
 
 describe('workflow.detector', function()
-  local detector = require('github-actions.workflow.detector')
+  local detector = require('github-actions.shared.workflow')
 
   describe('is_workflow_file', function()
     local test_cases = {

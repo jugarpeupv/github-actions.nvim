@@ -7,7 +7,7 @@ local helpers = require('spec.helpers.buffer_spec')
 
 describe('workflow.checker', function()
   ---@type WorkflowChecker
-  local checker = require('github-actions.workflow.checker')
+  local checker = require('github-actions.versions.checker')
   ---@type number
   local test_bufnr
 

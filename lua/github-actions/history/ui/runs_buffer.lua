@@ -1,5 +1,5 @@
 local formatter = require('github-actions.history.ui.formatter')
-local history = require('github-actions.workflow.history')
+local history = require('github-actions.history.api')
 
 local M = {}
 

@@ -14,7 +14,7 @@ local function flush_scheduled()
 end
 
 describe('workflow.history', function()
-  local history = require('github-actions.workflow.history')
+  local history = require('github-actions.history.api')
   local stub = require('luassert.stub')
 
   describe('fetch_runs', function()

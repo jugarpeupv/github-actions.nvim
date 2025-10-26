@@ -1,5 +1,5 @@
-local detector = require('github-actions.workflow.detector')
-local history = require('github-actions.workflow.history')
+local detector = require('github-actions.shared.workflow')
+local history = require('github-actions.history.api')
 local runs_buffer = require('github-actions.history.ui.runs_buffer')
 
 local M = {}

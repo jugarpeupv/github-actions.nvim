@@ -7,7 +7,7 @@ local helpers = require('spec.helpers.buffer_spec')
 
 describe('display', function()
   ---@type Display
-  local display = require('github-actions.display')
+  local display = require('github-actions.versions.ui.display')
   ---@type number
   local test_bufnr = helpers.create_yaml_buffer([[
 name: Test

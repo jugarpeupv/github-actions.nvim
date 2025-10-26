@@ -6,7 +6,7 @@
 dofile('spec/minimal_init.lua')
 
 describe('workflow.input', function()
-  local input = require('github-actions.workflow.input')
+  local input = require('github-actions.dispatch.input')
 
   describe('validate_input', function()
     it('should accept valid required input', function()

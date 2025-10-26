@@ -5,7 +5,7 @@ dofile('spec/minimal_init.lua')
 
 describe('cache', function()
   ---@type Cache
-  local cache = require('github-actions.cache')
+  local cache = require('github-actions.versions.cache')
 
   before_each(function()
     -- Clear cache before each test

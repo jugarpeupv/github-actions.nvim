@@ -1,10 +1,10 @@
 ---@class WorkflowChecker
 local M = {}
 
-local parser = require('github-actions.workflow.parser')
-local github = require('github-actions.github')
+local parser = require('github-actions.versions.parser')
+local github = require('github-actions.shared.github')
 local semver = require('github-actions.lib.semver')
-local cache = require('github-actions.cache')
+local cache = require('github-actions.versions.cache')
 
 ---Create version info from action and latest version
 ---@param action Action Parsed action usage from workflow
