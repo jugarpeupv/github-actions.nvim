@@ -54,10 +54,7 @@ local function dispatch_workflow_for_file(workflow_filepath)
   -- Parse workflow_dispatch configuration
   local workflow_dispatch = parser.parse_workflow_dispatch(bufnr)
   if not workflow_dispatch then
-    vim.notify(
-      string.format('Workflow "%s" does not support workflow_dispatch', workflow_file),
-      vim.log.levels.ERROR
-    )
+    vim.notify(string.format('Workflow "%s" does not support workflow_dispatch', workflow_file), vim.log.levels.ERROR)
     return
   end
 
