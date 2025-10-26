@@ -105,7 +105,7 @@ describe('history.ui.runs_buffer', function()
 
   describe('expand/collapse state management', function()
     it('should track expanded state for runs', function()
-      local bufnr = runs_buffer.create_buffer('test.yml')
+      local _ = runs_buffer.create_buffer('test.yml')
 
       local runs = {
         {

@@ -67,7 +67,7 @@ jobs:
       end)
 
       -- Call show_history
-      init.show_history(bufnr)
+      init.show_history(bufnr, {})
       flush_scheduled()
 
       -- Verify a new buffer was created
@@ -102,7 +102,7 @@ jobs:
       -- Stub vim.notify to capture error message
       local notify_stub = stub(vim, 'notify')
 
-      init.show_history(bufnr)
+      init.show_history(bufnr, {})
       flush_scheduled()
 
       -- Verify error was shown
@@ -127,7 +127,7 @@ jobs:
       -- Stub vim.notify to capture error message
       local notify_stub = stub(vim, 'notify')
 
-      init.show_history(bufnr)
+      init.show_history(bufnr, {})
       flush_scheduled()
 
       -- Verify error was shown
@@ -167,7 +167,7 @@ on: push
       -- Stub vim.notify to capture error message
       local notify_stub = stub(vim, 'notify')
 
-      init.show_history(bufnr)
+      init.show_history(bufnr, {})
       flush_scheduled()
 
       -- Verify error was shown
