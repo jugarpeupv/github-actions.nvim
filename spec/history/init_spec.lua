@@ -99,6 +99,11 @@ jobs:
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_name(bufnr, 'test.lua')
 
+      -- Stub detector.find_workflow_files to return empty array
+      local detector = require('github-actions.shared.workflow')
+      local detector_stub = stub(detector, 'find_workflow_files')
+      detector_stub.returns({})
+
       -- Stub vim.notify to capture error message
       local notify_stub = stub(vim, 'notify')
 
@@ -108,9 +113,10 @@ jobs:
       -- Verify error was shown
       assert.stub(notify_stub).was_called()
       ---@diagnostic disable-next-line: param-type-mismatch
-      assert.stub(notify_stub).was_called_with(match.matches('workflow file'), vim.log.levels.ERROR)
+      assert.stub(notify_stub).was_called_with(match.matches('No workflow files found'), vim.log.levels.ERROR)
 
       notify_stub:revert()
+      detector_stub:revert()
     end)
 
     it('should show error when workflow name not found', function()
@@ -124,6 +130,12 @@ jobs:
       local bufnr = buffer_helper.create_yaml_buffer(workflow_content)
       vim.api.nvim_buf_set_name(bufnr, '.github/workflows/test.yml')
 
+      -- Stub detector.find_workflow_files to return empty array
+      -- When workflow file is invalid (no name field), it falls back to file selection
+      local detector = require('github-actions.shared.workflow')
+      local detector_stub = stub(detector, 'find_workflow_files')
+      detector_stub.returns({})
+
       -- Stub vim.notify to capture error message
       local notify_stub = stub(vim, 'notify')
 
@@ -133,12 +145,13 @@ jobs:
       -- Verify error was shown
       -- New behavior: if current buffer is not a valid workflow file,
       -- it tries to find workflow files in .github/workflows/
-      -- Since we don't have that directory in tests, it shows "No workflow files found"
+      -- Since we stubbed find_workflow_files to return empty, it shows "No workflow files found"
       assert.stub(notify_stub).was_called()
       ---@diagnostic disable-next-line: param-type-mismatch
       assert.stub(notify_stub).was_called_with(match.matches('No workflow files found'), vim.log.levels.ERROR)
 
       notify_stub:revert()
+      detector_stub:revert()
     end)
 
     it('should show error when gh CLI fails', function()
