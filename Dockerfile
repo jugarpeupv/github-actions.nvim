@@ -37,10 +37,11 @@ WORKDIR /workspace
 
 COPY . .
 
-RUN mkdir -p /workspace/lua_modules \ 
-    && luarocks install --tree /workspace/lua_modules --only-deps --deps-mode=all github-actions.nvim-scm-1.rockspec \ 
-    && luarocks install --tree /workspace/lua_modules nlua \ 
-    && luarocks install --tree /workspace/lua_modules busted \ 
+RUN mkdir -p /workspace/lua_modules \
+    && luarocks install --tree /workspace/lua_modules --only-deps --deps-mode=all github-actions.nvim-scm-1.rockspec \
+    && luarocks install --tree /workspace/lua_modules nlua \
+    && luarocks install --tree /workspace/lua_modules busted \
+    && luarocks install --tree /workspace/lua_modules luacheck \
     && ( [ -d deps/nvim-treesitter ] || git clone --depth 1 https://github.com/nvim-treesitter/nvim-treesitter deps/nvim-treesitter )
 
 CMD ["scripts/test/run.sh"]

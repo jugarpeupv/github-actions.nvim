@@ -17,8 +17,8 @@ test-file: docker-build
 	$(DOCKER) run --rm -e TEST_FILE="$(FILE)" $(DOCKER_IMAGE)
 
 # Run linter
-lint:
-	eval $$(./luarocks path) && luacheck lua/
+lint: docker-build
+	$(DOCKER) run --rm $(DOCKER_IMAGE) sh -c 'eval $$(luarocks path --tree /workspace/lua_modules) && luacheck lua/'
 
 # Format code
 format:
