@@ -35,6 +35,8 @@ integration directly within your editor. It allows you to:
   https://cli.github.com/
 - nvim-treesitter with YAML parser
   https://github.com/nvim-treesitter/nvim-treesitter
+- telescope.nvim (optional, for enhanced workflow selection)
+  https://github.com/nvim-telescope/telescope.nvim
 
 ==============================================================================
 3. INSTALLATION                               *github-actions-installation*
@@ -45,6 +47,7 @@ Using lazy.nvim:
       'skanehira/github-actions.nvim',
       dependencies = {
         'nvim-treesitter/nvim-treesitter',
+        'nvim-telescope/telescope.nvim',  -- Optional
       },
       opts = {},
     }
@@ -84,6 +87,23 @@ View the run history for any workflow file. The history view shows:
 - Timestamp and duration
 
 You can expand runs to view jobs and steps, and view logs for each job.
+
+4.4 Workflow Selection~
+
+When running commands outside of a workflow file, a picker appears to select
+workflow files. The picker behavior depends on whether telescope.nvim is
+installed:
+
+With telescope.nvim (enhanced mode):
+- Multi-select support: Use <Tab> to select multiple workflows (history only)
+- Preview window: Shows the content of the selected workflow file
+- Preview scrolling: Use <C-u> and <C-d> to scroll up and down
+- Confirm selection: Press <CR> to open selected workflows
+- Multiple workflows: Each opens in a separate tab
+
+Without telescope.nvim (fallback mode):
+- Uses vim.ui.select for single file selection
+- No preview or multi-select support
 
 ==============================================================================
 5. CONFIGURATION                             *github-actions-configuration*
@@ -184,6 +204,9 @@ history.logs_fold_by_default       *github-actions-history-logs-fold-by-default*
     Show workflow run history. If the current buffer is a workflow file,
     show its history. Otherwise, show a selector to choose a workflow file.
 
+    When using telescope.nvim, you can select multiple workflow files using
+    <Tab>. Each selected workflow will open in a separate tab.
+
     The history buffer displays:
     - Recent workflow runs with status
     - Run ID, branch, and commit message
@@ -218,7 +241,23 @@ github_actions.get_config()                     *github-actions.get_config()*
 ==============================================================================
 8. KEYMAPS                                         *github-actions-keymaps*
 
-8.1 Workflow History Buffer~
+8.1 Workflow Picker (Telescope)~
+                                            *github-actions-workflow-picker*
+
+When telescope.nvim is installed, the workflow picker provides these keymaps:
+
+    <Tab>       Select/deselect a workflow file for multi-selection
+                (only available for :GithubActionsHistory command)
+
+    <CR>        Confirm selection and open workflow(s)
+
+    <C-u>       Scroll preview window up
+
+    <C-d>       Scroll preview window down
+
+    <Esc>       Cancel and close the picker
+
+8.2 Workflow History Buffer~
                                                 *github-actions-history-buffer*
 
 The workflow history buffer provides these keymaps:
@@ -231,7 +270,7 @@ The workflow history buffer provides these keymaps:
 
     q           Close the history buffer
 
-8.2 Log Buffer~
+8.3 Log Buffer~
                                                     *github-actions-log-buffer*
 
 The log buffer provides these keymaps for navigating logs:
@@ -244,7 +283,7 @@ The log buffer provides these keymaps for navigating logs:
 
     zc          Close fold
 
-8.3 Example Keymap Configuration~
+8.4 Example Keymap Configuration~
 
 You can set up custom keymaps for the plugin functions:
 >lua

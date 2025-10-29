@@ -15,6 +15,7 @@ A Neovim plugin for managing GitHub Actions workflows directly from Neovim.
 - Neovim 0.9+
 - [GitHub CLI (`gh`)](https://cli.github.com/) installed and authenticated
 - [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter) with YAML parser
+- [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) (optional, for enhanced workflow selection with multi-select and preview)
 
 ## Installation
 
@@ -25,6 +26,7 @@ A Neovim plugin for managing GitHub Actions workflows directly from Neovim.
   'skanehira/github-actions.nvim',
   dependencies = {
     'nvim-treesitter/nvim-treesitter',
+    'nvim-telescope/telescope.nvim',  -- Optional: for enhanced workflow selection
   },
   opts = {},
 }
@@ -103,6 +105,21 @@ require('github-actions').setup({
 
 - `:GithubActionsDispatch` - Dispatch the current workflow (only available in workflow files with `workflow_dispatch` trigger)
 - `:GithubActionsHistory` - Show workflow run history for the current workflow file
+
+### Workflow Selection
+
+When running these commands outside of a workflow file, a picker will appear to select workflow files:
+
+**With telescope.nvim (enhanced mode):**
+- Use `<Tab>` to select multiple workflow files (history command only)
+- Preview window shows the content of the selected workflow file
+- Use `<C-u>` and `<C-d>` to scroll the preview window up and down
+- Press `<CR>` to confirm selection
+- Multiple selected workflows will open in separate tabs
+
+**Without telescope.nvim (fallback mode):**
+- Use `vim.ui.select` for single file selection
+- No preview or multi-select support
 
 ### Workflow History Usage
 
