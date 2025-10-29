@@ -32,9 +32,10 @@ function M.select_workflow_files(opts)
   local has_telescope_state, telescope_state = pcall(require, 'telescope.actions.state')
 
   if has_telescope and has_telescope_actions and has_telescope_state then
-    -- Use telescope native picker for multi-select support
+    -- Use telescope native picker for multi-select support and preview
     local pickers = require('telescope.pickers')
     local finders = require('telescope.finders')
+    local previewers = require('telescope.previewers')
     local conf = require('telescope.config').values
 
     pickers
@@ -42,9 +43,24 @@ function M.select_workflow_files(opts)
         prompt_title = opts.prompt,
         finder = finders.new_table({
           results = items,
+          entry_maker = function(entry)
+            return {
+              value = entry,
+              display = entry,
+              ordinal = entry,
+              path = path_map[entry],
+            }
+          end,
         }),
+        previewer = previewers.vim_buffer_cat.new({}),
         sorter = conf.generic_sorter({}),
-        attach_mappings = function(prompt_bufnr, _)
+        attach_mappings = function(prompt_bufnr, map)
+          -- Add preview scrolling keymaps
+          map('i', '<C-u>', telescope_actions.preview_scrolling_up)
+          map('i', '<C-d>', telescope_actions.preview_scrolling_down)
+          map('n', '<C-u>', telescope_actions.preview_scrolling_up)
+          map('n', '<C-d>', telescope_actions.preview_scrolling_down)
+
           telescope_actions.select_default:replace(function()
             local picker = telescope_state.get_current_picker(prompt_bufnr)
             local selections = picker:get_multi_selection()
