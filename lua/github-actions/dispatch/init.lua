@@ -6,6 +6,7 @@ local input = require('github-actions.dispatch.input')
 local github = require('github-actions.shared.github')
 local git = require('github-actions.lib.git')
 local detector = require('github-actions.shared.workflow')
+local picker = require('github-actions.shared.picker')
 
 ---Handle branch selection callback
 ---@param workflow_file string Workflow filename
@@ -87,30 +88,13 @@ function M.dispatch_workflow(bufnr)
   end
 
   -- Current buffer is not a workflow file, show selector
-  local workflow_files = detector.find_workflow_files()
-  if #workflow_files == 0 then
-    vim.notify('[GitHub Actions] No workflow files found in .github/workflows/', vim.log.levels.ERROR)
-    return
-  end
-
-  -- Extract just the filenames for display
-  local filenames = {}
-  local filepath_map = {}
-  for _, path in ipairs(workflow_files) do
-    local filename = path:match('[^/]+%.ya?ml$')
-    table.insert(filenames, filename)
-    filepath_map[filename] = path
-  end
-
-  vim.ui.select(filenames, {
+  picker.select_workflow_files({
     prompt = 'Select workflow file:',
-  }, function(selected)
-    if not selected then
-      return
-    end
-    local selected_path = filepath_map[selected]
-    dispatch_workflow_for_file(selected_path)
-  end)
+    allow_multiple = false,
+    on_select = function(selected_paths)
+      dispatch_workflow_for_file(selected_paths[1])
+    end,
+  })
 end
 
 return M
