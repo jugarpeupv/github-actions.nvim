@@ -1,4 +1,5 @@
 local detector = require('github-actions.shared.workflow')
+local picker = require('github-actions.shared.picker')
 local history = require('github-actions.history.api')
 local runs_buffer = require('github-actions.history.ui.runs_buffer')
 
@@ -34,10 +35,13 @@ local function validate_workflow_buffer(bufnr)
 end
 
 ---Show workflow run history for a specific workflow file
----@param workflow_file string Workflow filename
+---@param workflow_filepath string Workflow file path (absolute or relative)
 ---@param custom_icons? HistoryIcons Custom icon configuration
 ---@param custom_highlights? HistoryHighlights Custom highlight configuration
-local function show_history_for_file(workflow_file, custom_icons, custom_highlights)
+local function show_history_for_file(workflow_filepath, custom_icons, custom_highlights)
+  -- Extract filename from path
+  local workflow_file = workflow_filepath:match('[^/]+%.ya?ml$')
+
   history.fetch_runs(workflow_file, function(runs, err)
     if err then
       vim.notify('[GitHub Actions] Failed to fetch workflow runs: ' .. err, vim.log.levels.ERROR)
@@ -49,7 +53,7 @@ local function show_history_for_file(workflow_file, custom_icons, custom_highlig
       return
     end
 
-    local hist_bufnr, _ = runs_buffer.create_buffer(workflow_file)
+    local hist_bufnr, _ = runs_buffer.create_buffer(workflow_file, true)
     runs_buffer.render(hist_bufnr, runs, custom_icons, custom_highlights)
   end)
 end
@@ -79,27 +83,16 @@ function M.show_history(bufnr, config)
   end
 
   -- Current buffer is not a workflow file, show selector
-  local workflow_files = detector.find_workflow_files()
-  if #workflow_files == 0 then
-    vim.notify('[GitHub Actions] No workflow files found in .github/workflows/', vim.log.levels.ERROR)
-    return
-  end
-
-  -- Extract just the filenames for display
-  local filenames = {}
-  for _, path in ipairs(workflow_files) do
-    local filename = path:match('[^/]+%.ya?ml$')
-    table.insert(filenames, filename)
-  end
-
-  vim.ui.select(filenames, {
-    prompt = 'Select workflow file:',
-  }, function(selected)
-    if not selected then
-      return
-    end
-    show_history_for_file(selected, custom_icons, custom_highlights)
-  end)
+  picker.select_workflow_files({
+    prompt = 'Select workflow file(s)',
+    allow_multiple = true,
+    on_select = function(selected_paths)
+      -- Multiple selection: open all in new tabs
+      for _, filepath in ipairs(selected_paths) do
+        show_history_for_file(filepath, custom_icons, custom_highlights)
+      end
+    end,
+  })
 end
 
 return M

@@ -9,9 +9,14 @@ local buffer_data = {}
 
 ---Create a new buffer for displaying workflow run history
 ---@param workflow_file string Workflow file name (e.g., "ci.yml")
+---@param open_in_new_tab? boolean Whether to open in a new tab (default: true)
 ---@return number bufnr Buffer number
 ---@return number winnr Window number
-function M.create_buffer(workflow_file)
+function M.create_buffer(workflow_file, open_in_new_tab)
+  if open_in_new_tab == nil then
+    open_in_new_tab = true
+  end
+
   local bufname = string.format('[GitHub Actions] %s - Run History', workflow_file)
 
   -- Check if buffer with this name already exists
@@ -26,8 +31,10 @@ function M.create_buffer(workflow_file)
       vim.api.nvim_set_current_win(winid)
       return existing_bufnr, winid
     else
-      -- Buffer exists but not displayed, open it in new tab
-      vim.cmd('tabnew')
+      -- Buffer exists but not displayed, open it in new tab if requested
+      if open_in_new_tab then
+        vim.cmd('tabnew')
+      end
       local winid = vim.api.nvim_get_current_win()
       vim.api.nvim_win_set_buf(winid, existing_bufnr)
       return existing_bufnr, winid
@@ -46,8 +53,10 @@ function M.create_buffer(workflow_file)
   -- Set buffer name
   vim.api.nvim_buf_set_name(bufnr, bufname)
 
-  -- Open buffer in a new tab
-  vim.cmd('tabnew')
+  -- Open buffer in a new tab if requested
+  if open_in_new_tab then
+    vim.cmd('tabnew')
+  end
   local winnr = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(winnr, bufnr)
 
