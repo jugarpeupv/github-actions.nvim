@@ -116,9 +116,9 @@ it using the setup function:
     require('github-actions').setup({
       actions = {
         icons = {
-          outdated = '',
-          latest = '',
-          error = '',
+          outdated = '',
+          latest = '',
+          error = '',
         },
         highlight_latest = 'GitHubActionsVersionLatest',
         highlight_outdated = 'GitHubActionsVersionOutdated',

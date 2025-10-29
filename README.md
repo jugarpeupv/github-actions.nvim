@@ -55,9 +55,9 @@ The plugin works out of the box with sensible defaults. You can customize it:
 require('github-actions').setup({
   actions = {
     icons = {
-      outdated = '',  -- Icon for outdated versions (default)
-      latest = '',    -- Icon for latest versions (default)
-      error = '',     -- Icon for error (default)
+      outdated = '',  -- Icon for outdated versions (default)
+      latest = '',    -- Icon for latest versions (default)
+      error = '',     -- Icon for error (default)
     },
     highlight_latest = 'GitHubActionsVersionLatest',      -- Highlight for latest versions
     highlight_outdated = 'GitHubActionsVersionOutdated',  -- Highlight for outdated versions
