@@ -1,26 +1,16 @@
 local formatter = require('github-actions.history.ui.formatter')
 local history = require('github-actions.history.api')
+local buffer_utils = require('github-actions.shared.buffer_utils')
+local highlighter = require('github-actions.history.ui.highlighter')
+local cursor_tracker = require('github-actions.history.ui.cursor_tracker')
+local loading_indicator = require('github-actions.history.ui.loading_indicator')
+local log_viewer = require('github-actions.history.ui.log_viewer')
 
 local M = {}
 
 -- Store buffer-specific data
 -- bufnr -> { runs = {...}, custom_icons = {...}, custom_highlights = {...} }
 local buffer_data = {}
-
----Find window displaying the specified buffer across all tab pages
----@param bufnr number Buffer number to find
----@return number|nil winid Window ID where buffer is displayed, or nil if not found
-local function find_window_for_buffer(bufnr)
-  -- Search through all tab pages
-  for _, tabpage in ipairs(vim.api.nvim_list_tabpages()) do
-    for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(tabpage)) do
-      if vim.api.nvim_win_get_buf(winid) == bufnr then
-        return winid
-      end
-    end
-  end
-  return nil
-end
 
 ---Create a new buffer for displaying workflow run history
 ---@param workflow_file string Workflow file name (e.g., "ci.yml")
@@ -38,7 +28,7 @@ function M.create_buffer(workflow_file, open_in_new_tab)
   local existing_bufnr = vim.fn.bufnr(bufname)
   if existing_bufnr ~= -1 and vim.api.nvim_buf_is_valid(existing_bufnr) then
     -- Buffer exists, find its window across all tab pages
-    local winid = find_window_for_buffer(existing_bufnr)
+    local winid = buffer_utils.find_window_for_buffer(existing_bufnr)
     if winid then
       -- Buffer is already displayed in a window
       -- Return the buffer and window where it's displayed without switching to it
@@ -93,223 +83,29 @@ function M.create_buffer(workflow_file, open_in_new_tab)
   return bufnr, winnr
 end
 
----Get run index from cursor line
----@param bufnr number Buffer number
----@return number|nil run_idx Run index (1-based) or nil if not on a run line
-local function get_run_at_cursor(bufnr)
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local line_idx = cursor[1] - 1 -- Convert to 0-based
-
-  local data = buffer_data[bufnr]
-  if not data or not data.runs then
-    return nil
-  end
-
-  -- Find which run this line belongs to
-  local current_line = 0 -- First run starts at line 0 (0-based)
-  for run_idx, run in ipairs(data.runs) do
-    if line_idx == current_line then
-      return run_idx
-    end
-
-    current_line = current_line + 1
-
-    -- Count expanded lines for this run
-    if run.expanded and run.jobs then
-      for _, job in ipairs(run.jobs) do
-        current_line = current_line + 1
-        if job.steps then
-          current_line = current_line + #job.steps
-        end
-      end
-    end
-  end
-
-  return nil
-end
-
----Get job at cursor position
----@param bufnr number Buffer number
----@return number|nil run_idx Index of the run
----@return number|nil job_idx Index of the job
-local function get_job_at_cursor(bufnr)
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local line_idx = cursor[1] - 1
-
-  local data = buffer_data[bufnr]
-  if not data or not data.runs then
-    return nil, nil
-  end
-
-  local current_line = 0 -- First run starts at line 0
-
-  for run_idx, run in ipairs(data.runs) do
-    if line_idx == current_line then
-      -- Cursor is on run line
-      return nil, nil
-    end
-
-    current_line = current_line + 1
-
-    -- Check expanded lines for this run
-    if run.expanded and run.jobs then
-      for job_idx, job in ipairs(run.jobs) do
-        if line_idx == current_line then
-          -- Cursor is on job line
-          return run_idx, job_idx
-        end
-
-        current_line = current_line + 1
-
-        if job.steps then
-          for _, _ in ipairs(job.steps) do
-            current_line = current_line + 1
-          end
-        end
-      end
-    end
-  end
-
-  return nil, nil
-end
-
----Show loading indicator on current line using virtual text
----@param bufnr number Buffer number
----@return number line_idx Line index where loading indicator was added
-local function show_loading_indicator(bufnr)
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local line_idx = cursor[1] - 1
-
-  -- Create a namespace for loading indicators
-  local ns = vim.api.nvim_create_namespace('github-actions-loading')
-
-  -- Clear any existing loading indicators
-  vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
-
-  -- Add virtual text to show loading state (doesn't modify buffer content)
-  vim.api.nvim_buf_set_extmark(bufnr, ns, line_idx, 0, {
-    virt_text = { { '  (Loading jobs...)', 'GitHubActionsHistoryTime' } },
-    virt_text_pos = 'eol',
-  })
-
-  return line_idx
-end
-
----Clear loading indicator
----@param bufnr number Buffer number
-local function clear_loading_indicator(bufnr)
-  local ns = vim.api.nvim_create_namespace('github-actions-loading')
-  vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
-end
-
----View logs for a job
----@param bufnr number Buffer number
----@param run_idx number Index of the run in the runs array
----@param job_idx number Index of the job in the jobs array
-local function view_job_logs(bufnr, run_idx, job_idx)
-  local data = buffer_data[bufnr]
-  if not data or not data.runs then
-    return
-  end
-
-  local run = data.runs[run_idx]
-  if not run or not run.jobs then
-    return
-  end
-
-  local job = run.jobs[job_idx]
-  if not job then
-    return
-  end
-
-  -- Check if workflow run itself is still in progress
-  -- Even if individual jobs are completed, logs are only available when the entire run completes
-  if run.status == 'in_progress' or run.status == 'queued' then
-    local message = string.format(
-      'Workflow run #%d is still %s. Logs will be available when the entire workflow completes.',
-      run.databaseId,
-      run.status == 'in_progress' and 'running' or 'queued'
-    )
-    vim.schedule(function()
-      vim.notify('[GitHub Actions] ' .. message, vim.log.levels.WARN)
-    end)
-    return
-  end
-
-  -- Check if job is still in progress or queued
-  -- If so, don't open log buffer at all
-  if job.status == 'in_progress' or job.status == 'queued' then
-    local message = string.format(
-      'Job "%s" is still %s. Logs will be available when it completes.',
-      job.name,
-      job.status == 'in_progress' and 'running' or 'queued'
-    )
-    vim.schedule(function()
-      vim.notify('[GitHub Actions] ' .. message, vim.log.levels.WARN)
-    end)
-    return
-  end
-
-  -- Create or reuse log buffer
-  local logs_buffer = require('github-actions.history.ui.logs_buffer')
-  local log_parser = require('github-actions.history.log_parser')
-  local github_actions = require('github-actions')
-  local config = github_actions.get_config()
-
-  local title = string.format('Job: %s', job.name)
-  local log_bufnr, _ = logs_buffer.create_buffer(title, run.databaseId, config.history)
-
-  -- Check cache first
-  local cached_formatted, _ = logs_buffer.get_cached_logs(run.databaseId, job.databaseId)
-  if cached_formatted then
-    -- Use cached logs
-    logs_buffer.render(log_bufnr, cached_formatted)
-    return
-  end
-
-  -- Show loading indicator only for new fetches
-  logs_buffer.render(log_bufnr, 'Loading logs...')
-
-  -- Fetch logs for the entire job
-  history.fetch_logs(run.databaseId, job.databaseId, function(logs, err)
-    vim.schedule(function()
-      if err then
-        logs_buffer.render(log_bufnr, 'Failed to fetch logs: ' .. err)
-        vim.notify('[GitHub Actions] Failed to fetch logs: ' .. err, vim.log.levels.ERROR)
-        return
-      end
-
-      -- Parse and format logs, removing ANSI escape sequences
-      local formatted_logs = log_parser.parse(logs or '')
-
-      -- Cache both raw and formatted logs
-      logs_buffer.cache_logs(run.databaseId, job.databaseId, formatted_logs or 'No logs available', logs or '')
-
-      -- Render the logs
-      logs_buffer.render(log_bufnr, formatted_logs or 'No logs available')
-    end)
-  end)
-end
-
 ---Toggle expand/collapse for run at cursor, or view logs for job
 ---@param bufnr number Buffer number
 local function toggle_expand(bufnr)
+  local data = buffer_data[bufnr]
+  if not data or not data.runs then
+    return
+  end
+
   -- First, check if cursor is on a job
-  local job_run_idx, job_idx = get_job_at_cursor(bufnr)
+  local job_run_idx, job_idx = cursor_tracker.get_job_at_cursor(data.runs)
   if job_run_idx and job_idx then
     -- Cursor is on a job, view logs for entire job
-    view_job_logs(bufnr, job_run_idx, job_idx)
+    local run = data.runs[job_run_idx]
+    local job = run and run.jobs and run.jobs[job_idx]
+    if run and job then
+      log_viewer.view_logs(run, job)
+    end
     return
   end
 
   -- Not on a job, check if on a run
-  local run_idx = get_run_at_cursor(bufnr)
+  local run_idx = cursor_tracker.get_run_at_cursor(bufnr, data.runs)
   if not run_idx then
-    return
-  end
-
-  local data = buffer_data[bufnr]
-  if not data or not data.runs then
     return
   end
 
@@ -329,14 +125,14 @@ local function toggle_expand(bufnr)
     M.render(bufnr, data.runs, data.custom_icons, data.custom_highlights)
   else
     -- Show loading indicator
-    show_loading_indicator(bufnr)
+    loading_indicator.show(bufnr)
 
     -- Need to fetch jobs first
     history.fetch_jobs(run.databaseId, function(jobs_response, err)
       if err then
         -- Clear loading indicator and show error
         vim.schedule(function()
-          clear_loading_indicator(bufnr)
+          loading_indicator.clear(bufnr)
           M.render(bufnr, data.runs, data.custom_icons, data.custom_highlights)
           vim.notify('[GitHub Actions] Failed to fetch jobs: ' .. err, vim.log.levels.ERROR)
         end)
@@ -345,7 +141,7 @@ local function toggle_expand(bufnr)
 
       if jobs_response and jobs_response.jobs then
         vim.schedule(function()
-          clear_loading_indicator(bufnr)
+          loading_indicator.clear(bufnr)
           run.jobs = jobs_response.jobs
           run.expanded = true
           M.render(bufnr, data.runs, data.custom_icons, data.custom_highlights)
@@ -415,13 +211,13 @@ function M.setup_keymaps(bufnr)
 
   -- Collapse with <BS>
   vim.keymap.set('n', '<BS>', function()
-    local run_idx = get_run_at_cursor(bufnr)
-    if not run_idx then
+    local data = buffer_data[bufnr]
+    if not data or not data.runs then
       return
     end
 
-    local data = buffer_data[bufnr]
-    if not data or not data.runs then
+    local run_idx = cursor_tracker.get_run_at_cursor(bufnr, data.runs)
+    if not run_idx then
       return
     end
 
@@ -450,198 +246,11 @@ end
 ---@param runs table[] List of run objects
 ---@param custom_highlights? HistoryHighlights Custom highlight configuration
 local function apply_highlights(bufnr, runs, custom_highlights)
-  local ns = vim.api.nvim_create_namespace('github-actions-history')
-  vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
-
   -- Merge custom highlights with defaults
   local highlights = formatter.merge_highlights(custom_highlights)
 
-  -- Highlight each run line and expanded content
-  local current_line = 0 -- First run starts at line 0 (0-based)
-  for _, run in ipairs(runs) do
-    local line = vim.api.nvim_buf_get_lines(bufnr, current_line, current_line + 1, false)[1]
-
-    -- Highlight status icon
-    local hl_group = highlights.queued
-    if run.status == 'completed' then
-      if run.conclusion == 'success' then
-        hl_group = highlights.success
-      elseif run.conclusion == 'failure' then
-        hl_group = highlights.failure
-      elseif run.conclusion == 'cancelled' or run.conclusion == 'skipped' then
-        hl_group = highlights.cancelled
-      end
-    elseif run.status == 'in_progress' then
-      hl_group = highlights.running
-    end
-    vim.api.nvim_buf_set_extmark(bufnr, ns, current_line, 0, {
-      end_col = 1,
-      hl_group = hl_group,
-    })
-
-    -- Highlight run ID (#12345)
-    local id_start = line:find('#')
-    local id_end = nil
-    if id_start then
-      id_end = line:find('%s', id_start)
-      if id_end then
-        vim.api.nvim_buf_set_extmark(bufnr, ns, current_line, id_start - 1, {
-          end_col = id_end - 1,
-          hl_group = highlights.run_id,
-        })
-      end
-    end
-
-    -- Highlight branch name (before first colon)
-    if id_end then
-      local branch_end = line:find(':', id_end)
-      if branch_end then
-        vim.api.nvim_buf_set_extmark(bufnr, ns, current_line, id_end, {
-          end_col = branch_end,
-          hl_group = highlights.branch,
-        })
-      end
-    end
-
-    -- Highlight time info (last two columns)
-    local time_pattern = '%d+[smhdwy]+ ago'
-    local time_start = line:find(time_pattern)
-    if time_start then
-      vim.api.nvim_buf_set_extmark(bufnr, ns, current_line, time_start - 1, {
-        end_line = current_line,
-        end_col = #line,
-        hl_group = highlights.time,
-      })
-    end
-
-    current_line = current_line + 1
-
-    -- Highlight expanded jobs and steps
-    if run.expanded and run.jobs then
-      for _, job in ipairs(run.jobs) do
-        local job_line = vim.api.nvim_buf_get_lines(bufnr, current_line, current_line + 1, false)[1]
-
-        -- Highlight job status icon
-        local job_hl_group = highlights.queued
-        if job.status == 'completed' then
-          if job.conclusion == 'success' then
-            job_hl_group = highlights.success
-          elseif job.conclusion == 'failure' then
-            job_hl_group = highlights.failure
-          elseif job.conclusion == 'skipped' then
-            job_hl_group = highlights.cancelled
-          end
-        elseif job.status == 'in_progress' then
-          job_hl_group = highlights.running
-        end
-        vim.api.nvim_buf_set_extmark(bufnr, ns, current_line, 2, {
-          end_col = 3,
-          hl_group = job_hl_group,
-        })
-
-        -- Highlight "Job:" text
-        local job_start = job_line:find('Job:')
-        if job_start then
-          vim.api.nvim_buf_set_extmark(bufnr, ns, current_line, job_start - 1, {
-            end_col = job_start + 3,
-            hl_group = highlights.job_name,
-          })
-
-          -- Highlight job name
-          local name_start = job_start + 5
-          local time_start_job = job_line:find('%d+[smh]', name_start)
-          local running_start = job_line:find('%(running%)', name_start)
-          local name_end = time_start_job or running_start or #job_line
-          if name_start < name_end then
-            vim.api.nvim_buf_set_extmark(bufnr, ns, current_line, name_start - 1, {
-              end_col = name_end - 1,
-              hl_group = highlights.job_name,
-            })
-          end
-
-          -- Highlight duration/status
-          if time_start_job or running_start then
-            vim.api.nvim_buf_set_extmark(bufnr, ns, current_line, name_end - 1, {
-              end_col = #job_line,
-              hl_group = highlights.time,
-            })
-          end
-        end
-
-        current_line = current_line + 1
-
-        -- Highlight steps
-        if job.steps then
-          for _, step in ipairs(job.steps) do
-            local step_line = vim.api.nvim_buf_get_lines(bufnr, current_line, current_line + 1, false)[1]
-
-            -- Highlight tree prefix (├─ or └─)
-            local prefix_end = step_line:find('─')
-            if prefix_end then
-              vim.api.nvim_buf_set_extmark(bufnr, ns, current_line, 0, {
-                end_col = prefix_end + 1,
-                hl_group = highlights.tree_prefix,
-              })
-            end
-
-            -- Highlight step status icon
-            local step_hl_group = highlights.queued
-            if step.status == 'completed' then
-              if step.conclusion == 'success' then
-                step_hl_group = highlights.success
-              elseif step.conclusion == 'failure' then
-                step_hl_group = highlights.failure
-              elseif step.conclusion == 'skipped' then
-                step_hl_group = highlights.cancelled
-              end
-            elseif step.status == 'in_progress' then
-              step_hl_group = highlights.running
-            end
-            -- Icon is after the tree prefix
-            local icon_pos = prefix_end and prefix_end + 2 or 4
-            vim.api.nvim_buf_set_extmark(bufnr, ns, current_line, icon_pos, {
-              end_col = icon_pos + 1,
-              hl_group = step_hl_group,
-            })
-
-            -- Highlight step name
-            local name_start_pos = icon_pos + 2
-            local time_start_step = step_line:find('%d+[smh]', name_start_pos)
-            local skipped_start = step_line:find('%(skipped%)', name_start_pos)
-            local running_start_step = step_line:find('%(running%)', name_start_pos)
-            local name_end_pos = time_start_step or skipped_start or running_start_step or #step_line
-            if name_start_pos < name_end_pos then
-              vim.api.nvim_buf_set_extmark(bufnr, ns, current_line, name_start_pos, {
-                end_col = name_end_pos - 1,
-                hl_group = highlights.step_name,
-              })
-            end
-
-            -- Highlight duration/status
-            if time_start_step or skipped_start or running_start_step then
-              vim.api.nvim_buf_set_extmark(bufnr, ns, current_line, name_end_pos - 1, {
-                end_col = #step_line,
-                hl_group = highlights.time,
-              })
-            end
-
-            current_line = current_line + 1
-          end
-        end
-      end
-    end
-  end
-
-  -- Highlight footer
-  local footer_line = current_line + 1
-  local footer_text = vim.api.nvim_buf_get_lines(bufnr, footer_line, footer_line + 1, false)[1]
-  if footer_text then
-    vim.api.nvim_buf_set_extmark(bufnr, ns, footer_line, 0, {
-      end_line = footer_line,
-      end_col = #footer_text,
-      hl_group = highlights.time,
-    })
-  end
+  -- Delegate to highlighter module
+  highlighter.apply_highlights(bufnr, runs, highlights)
 end
 
 ---Render run list in the buffer
