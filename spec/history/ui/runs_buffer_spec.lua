@@ -46,6 +46,21 @@ describe('history.ui.runs_buffer', function()
       end
       assert.is_true(has_q_keymap, 'Should have "q" keymap to close buffer')
     end)
+
+    it('should set up R keymap for refresh', function()
+      local bufnr, _ = runs_buffer.create_buffer('ci.yml')
+
+      -- Check that 'R' keymap exists
+      local keymaps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
+      local has_r_keymap = false
+      for _, map in ipairs(keymaps) do
+        if map.lhs == 'R' then
+          has_r_keymap = true
+          break
+        end
+      end
+      assert.is_true(has_r_keymap, 'Should have "R" keymap to refresh buffer')
+    end)
   end)
 
   describe('render', function()

@@ -350,6 +350,52 @@ local function toggle_expand(bufnr)
   end
 end
 
+---Refresh workflow run history
+---@param bufnr number Buffer number
+local function refresh_history(bufnr)
+  -- Extract workflow filename from buffer name
+  local bufname = vim.api.nvim_buf_get_name(bufnr)
+  local workflow_file = bufname:match('([^/]+%.ya?ml)%s*%-')
+
+  if not workflow_file then
+    vim.notify('[GitHub Actions] Could not determine workflow file', vim.log.levels.ERROR)
+    return
+  end
+
+  -- Get current buffer data to preserve icons and highlights
+  local data = buffer_data[bufnr]
+  local custom_icons = data and data.custom_icons
+  local custom_highlights = data and data.custom_highlights
+
+  -- Show loading indicator
+  vim.bo[bufnr].modifiable = true
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { 'Refreshing workflow runs...' })
+  vim.bo[bufnr].modifiable = false
+
+  -- Fetch fresh data from GitHub API
+  history.fetch_runs(workflow_file, function(runs, err)
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+
+      if err then
+        vim.notify('[GitHub Actions] Failed to refresh: ' .. err, vim.log.levels.ERROR)
+        return
+      end
+
+      if not runs then
+        vim.notify('[GitHub Actions] No runs data returned', vim.log.levels.ERROR)
+        return
+      end
+
+      -- Re-render with fresh data
+      M.render(bufnr, runs, custom_icons, custom_highlights)
+      vim.notify('[GitHub Actions] Workflow runs refreshed', vim.log.levels.INFO)
+    end)
+  end)
+end
+
 ---Set up keymaps for the buffer
 ---@param bufnr number Buffer number
 function M.setup_keymaps(bufnr)
@@ -382,6 +428,11 @@ function M.setup_keymaps(bufnr)
       run.expanded = false
       M.render(bufnr, data.runs, data.custom_icons, data.custom_highlights)
     end
+  end, opts)
+
+  -- Refresh with 'R'
+  vim.keymap.set('n', 'R', function()
+    refresh_history(bufnr)
   end, opts)
 end
 
@@ -634,7 +685,7 @@ function M.render(bufnr, runs, custom_icons, custom_highlights)
   end
 
   table.insert(lines, '')
-  table.insert(lines, 'Press <CR> to expand run / view job logs, <BS> to collapse, q to close')
+  table.insert(lines, 'Press <CR> to expand run / view job logs, <BS> to collapse, R to refresh, q to close')
 
   -- Set buffer lines
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
