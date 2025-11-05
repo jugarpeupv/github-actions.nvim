@@ -194,6 +194,63 @@ local function refresh_history(bufnr)
   end)
 end
 
+---Watch a running workflow run
+---@param bufnr number Buffer number
+local function watch_run(bufnr)
+  local data = buffer_data[bufnr]
+  if not data or not data.runs then
+    return
+  end
+
+  local run_idx = cursor_tracker.get_run_at_cursor(bufnr, data.runs)
+  if not run_idx then
+    vim.notify('[GitHub Actions] Cursor is not on a run', vim.log.levels.WARN)
+    return
+  end
+
+  local run = data.runs[run_idx]
+
+  -- Check if run is watchable (in_progress or queued runs)
+  if run.status ~= 'in_progress' and run.status ~= 'queued' then
+    local message = string.format(
+      '[GitHub Actions] Run #%d is %s. Only in-progress or queued runs can be watched.',
+      run.databaseId,
+      run.status
+    )
+    vim.notify(message, vim.log.levels.WARN)
+    return
+  end
+
+  -- Store the current window to return focus later
+  local history_winid = vim.api.nvim_get_current_win()
+
+  -- Execute gh run watch in a terminal with auto-refresh on exit
+  local cmd = string.format('gh run watch %d', run.databaseId)
+  vim.cmd('new | terminal ' .. cmd)
+
+  -- Set up autocmd to refresh history buffer when terminal exits
+  local term_bufnr = vim.api.nvim_get_current_buf()
+  vim.api.nvim_create_autocmd('TermClose', {
+    buffer = term_bufnr,
+    once = true,
+    callback = function()
+      vim.schedule(function()
+        -- Only refresh if the original buffer still exists
+        if vim.api.nvim_buf_is_valid(bufnr) then
+          refresh_history(bufnr)
+        end
+      end)
+    end,
+  })
+
+  -- Return focus to history buffer window and ensure normal mode
+  if vim.api.nvim_win_is_valid(history_winid) then
+    vim.api.nvim_set_current_win(history_winid)
+    -- Stop insert mode if it was activated by terminal startinsert
+    vim.cmd('stopinsert')
+  end
+end
+
 ---Set up keymaps for the buffer
 ---@param bufnr number Buffer number
 function M.setup_keymaps(bufnr)
@@ -231,6 +288,11 @@ function M.setup_keymaps(bufnr)
   -- Refresh with 'R'
   vim.keymap.set('n', 'R', function()
     refresh_history(bufnr)
+  end, opts)
+
+  -- Watch running workflow with 'W'
+  vim.keymap.set('n', 'W', function()
+    watch_run(bufnr)
   end, opts)
 end
 
@@ -298,7 +360,10 @@ function M.render(bufnr, runs, custom_icons, custom_highlights)
   end
 
   table.insert(lines, '')
-  table.insert(lines, 'Press <CR> to expand run / view job logs, <BS> to collapse, R to refresh, q to close')
+  table.insert(
+    lines,
+    'Press <CR> to expand run / view job logs, <BS> to collapse, R to refresh, W to watch run, q to close'
+  )
 
   -- Set buffer lines
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
