@@ -74,6 +74,11 @@ function M.create_buffer(workflow_file, open_in_new_tab)
   local winnr = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(winnr, bufnr)
 
+  -- Initialize buffer data with workflow_file
+  buffer_data[bufnr] = {
+    workflow_file = workflow_file,
+  }
+
   -- Set up keymaps
   M.setup_keymaps(bufnr)
 
@@ -353,19 +358,16 @@ end
 ---Refresh workflow run history
 ---@param bufnr number Buffer number
 local function refresh_history(bufnr)
-  -- Extract workflow filename from buffer name
-  local bufname = vim.api.nvim_buf_get_name(bufnr)
-  local workflow_file = bufname:match('([^/]+%.ya?ml)%s*%-')
-
-  if not workflow_file then
+  -- Get current buffer data
+  local data = buffer_data[bufnr]
+  if not data or not data.workflow_file then
     vim.notify('[GitHub Actions] Could not determine workflow file', vim.log.levels.ERROR)
     return
   end
 
-  -- Get current buffer data to preserve icons and highlights
-  local data = buffer_data[bufnr]
-  local custom_icons = data and data.custom_icons
-  local custom_highlights = data and data.custom_highlights
+  local workflow_file = data.workflow_file
+  local custom_icons = data.custom_icons
+  local custom_highlights = data.custom_highlights
 
   -- Show loading indicator
   vim.bo[bufnr].modifiable = true
@@ -648,8 +650,10 @@ end
 ---@param custom_icons? HistoryIcons Custom icon configuration
 ---@param custom_highlights? HistoryHighlights Custom highlight configuration
 function M.render(bufnr, runs, custom_icons, custom_highlights)
-  -- Store buffer data for keymap handlers
+  -- Store buffer data for keymap handlers, preserving workflow_file
+  local existing_data = buffer_data[bufnr] or {}
   buffer_data[bufnr] = {
+    workflow_file = existing_data.workflow_file,
     runs = runs,
     custom_icons = custom_icons,
     custom_highlights = custom_highlights,
