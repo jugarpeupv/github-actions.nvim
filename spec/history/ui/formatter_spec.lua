@@ -2,6 +2,7 @@ dofile('spec/minimal_init.lua')
 
 describe('history.ui.formatter', function()
   local formatter = require('github-actions.history.ui.formatter')
+  local config = require('github-actions.config')
 
   describe('get_status_icon', function()
     describe('with default icons', function()
@@ -25,7 +26,8 @@ describe('history.ui.formatter', function()
             tc.conclusion or 'nil'
           ),
           function()
-            assert.equals(tc.expected, formatter.get_status_icon(tc.status, tc.conclusion))
+            local defaults = config.get_defaults()
+            assert.equals(tc.expected, formatter.get_status_icon(tc.status, tc.conclusion, defaults.history.icons))
           end
         )
       end
@@ -33,49 +35,67 @@ describe('history.ui.formatter', function()
 
     describe('with custom icons', function()
       it('should use custom success icon', function()
+        local defaults = config.get_defaults()
         local custom_icons = { success = '[OK]' }
-        assert.equals('[OK]', formatter.get_status_icon('completed', 'success', custom_icons))
+        local icons = config.merge_icons(defaults.history.icons, custom_icons)
+        assert.equals('[OK]', formatter.get_status_icon('completed', 'success', icons))
       end)
 
       it('should use custom failure icon', function()
+        local defaults = config.get_defaults()
         local custom_icons = { failure = '[FAIL]' }
-        assert.equals('[FAIL]', formatter.get_status_icon('completed', 'failure', custom_icons))
+        local icons = config.merge_icons(defaults.history.icons, custom_icons)
+        assert.equals('[FAIL]', formatter.get_status_icon('completed', 'failure', icons))
       end)
 
       it('should use custom cancelled icon', function()
+        local defaults = config.get_defaults()
         local custom_icons = { cancelled = '[CANCEL]' }
-        assert.equals('[CANCEL]', formatter.get_status_icon('completed', 'cancelled', custom_icons))
+        local icons = config.merge_icons(defaults.history.icons, custom_icons)
+        assert.equals('[CANCEL]', formatter.get_status_icon('completed', 'cancelled', icons))
       end)
 
       it('should use custom skipped icon', function()
+        local defaults = config.get_defaults()
         local custom_icons = { skipped = '[SKIP]' }
-        assert.equals('[SKIP]', formatter.get_status_icon('completed', 'skipped', custom_icons))
+        local icons = config.merge_icons(defaults.history.icons, custom_icons)
+        assert.equals('[SKIP]', formatter.get_status_icon('completed', 'skipped', icons))
       end)
 
       it('should use custom in_progress icon', function()
+        local defaults = config.get_defaults()
         local custom_icons = { in_progress = '[RUN]' }
-        assert.equals('[RUN]', formatter.get_status_icon('in_progress', nil, custom_icons))
+        local icons = config.merge_icons(defaults.history.icons, custom_icons)
+        assert.equals('[RUN]', formatter.get_status_icon('in_progress', nil, icons))
       end)
 
       it('should use custom queued icon', function()
+        local defaults = config.get_defaults()
         local custom_icons = { queued = '[QUEUE]' }
-        assert.equals('[QUEUE]', formatter.get_status_icon('queued', nil, custom_icons))
+        local icons = config.merge_icons(defaults.history.icons, custom_icons)
+        assert.equals('[QUEUE]', formatter.get_status_icon('queued', nil, icons))
       end)
 
       it('should use custom waiting icon', function()
+        local defaults = config.get_defaults()
         local custom_icons = { waiting = '[WAIT]' }
-        assert.equals('[WAIT]', formatter.get_status_icon('waiting', nil, custom_icons))
+        local icons = config.merge_icons(defaults.history.icons, custom_icons)
+        assert.equals('[WAIT]', formatter.get_status_icon('waiting', nil, icons))
       end)
 
       it('should use custom unknown icon', function()
+        local defaults = config.get_defaults()
         local custom_icons = { unknown = '[???]' }
-        assert.equals('[???]', formatter.get_status_icon('unknown', nil, custom_icons))
+        local icons = config.merge_icons(defaults.history.icons, custom_icons)
+        assert.equals('[???]', formatter.get_status_icon('unknown', nil, icons))
       end)
 
       it('should fall back to default icons when custom icon is not provided', function()
+        local defaults = config.get_defaults()
         local custom_icons = { success = '[OK]' }
+        local icons = config.merge_icons(defaults.history.icons, custom_icons)
         -- failure icon not provided, should use default
-        assert.equals('✗', formatter.get_status_icon('completed', 'failure', custom_icons))
+        assert.equals('✗', formatter.get_status_icon('completed', 'failure', icons))
       end)
     end)
   end)
@@ -95,7 +115,8 @@ describe('history.ui.formatter', function()
         updatedAt = '2025-10-19T10:05:24Z',
       }
 
-      local result = formatter.format_run(run, now)
+      local defaults = config.get_defaults()
+      local result = formatter.format_run(run, now, defaults.history.icons)
       -- Format: ✓ #12345 main: feat: add new feature    2h ago    5m 24s
       assert.matches('✓', result)
       assert.matches('#12345', result)
@@ -116,7 +137,8 @@ describe('history.ui.formatter', function()
         updatedAt = '2025-10-19T11:51:45Z',
       }
 
-      local result = formatter.format_run(run, now)
+      local defaults = config.get_defaults()
+      local result = formatter.format_run(run, now, defaults.history.icons)
       assert.matches('✗', result)
     end)
 
@@ -131,7 +153,8 @@ describe('history.ui.formatter', function()
         updatedAt = '2025-10-19T11:59:00Z',
       }
 
-      local result = formatter.format_run(run, now)
+      local defaults = config.get_defaults()
+      local result = formatter.format_run(run, now, defaults.history.icons)
       assert.matches('⊙', result)
       assert.matches('#12347', result)
       assert.matches('%(running%)', result)
@@ -148,8 +171,10 @@ describe('history.ui.formatter', function()
         updatedAt = '2025-10-19T10:03:00Z',
       }
 
+      local defaults = config.get_defaults()
       local custom_icons = { success = '[OK]' }
-      local result = formatter.format_run(run, now, custom_icons)
+      local icons = config.merge_icons(defaults.history.icons, custom_icons)
+      local result = formatter.format_run(run, now, icons)
       assert.matches('%[OK%]', result)
       assert.matches('#99999', result)
       assert.matches('custom icon test', result)
@@ -168,7 +193,8 @@ describe('history.ui.formatter', function()
         completedAt = '2025-10-19T10:03:24Z',
       }
 
-      local result = formatter.format_job(job)
+      local defaults = config.get_defaults()
+      local result = formatter.format_job(job, defaults.history.icons)
       assert.matches('Job: test %(ubuntu%-latest, stable%)', result)
       assert.matches('✓', result)
       assert.matches('3m 24s', result)
@@ -183,7 +209,8 @@ describe('history.ui.formatter', function()
         completedAt = '2025-10-19T10:01:45Z',
       }
 
-      local result = formatter.format_job(job)
+      local defaults = config.get_defaults()
+      local result = formatter.format_job(job, defaults.history.icons)
       assert.matches('Job: build', result)
       assert.matches('✗', result)
       assert.matches('1m 45s', result)
@@ -198,7 +225,8 @@ describe('history.ui.formatter', function()
         completedAt = nil,
       }
 
-      local result = formatter.format_job(job)
+      local defaults = config.get_defaults()
+      local result = formatter.format_job(job, defaults.history.icons)
       assert.matches('Job: deploy', result)
       assert.matches('⊙', result)
       assert.matches('%(running%)', result)
@@ -213,8 +241,10 @@ describe('history.ui.formatter', function()
         completedAt = '2025-10-19T10:00:12Z',
       }
 
+      local defaults = config.get_defaults()
       local custom_icons = { success = '[PASS]' }
-      local result = formatter.format_job(job, custom_icons)
+      local icons = config.merge_icons(defaults.history.icons, custom_icons)
+      local result = formatter.format_job(job, icons)
       assert.matches('%[PASS%]', result)
       assert.matches('Job: lint', result)
       assert.not_matches('✓', result)
@@ -231,7 +261,8 @@ describe('history.ui.formatter', function()
         completedAt = '2025-10-19T10:00:45Z',
       }
 
-      local result = formatter.format_step(step, false)
+      local defaults = config.get_defaults()
+      local result = formatter.format_step(step, false, defaults.history.icons)
       assert.matches('├─ ✓ Run tests', result)
       assert.matches('45s', result)
     end)
@@ -245,7 +276,8 @@ describe('history.ui.formatter', function()
         completedAt = '2025-10-19T10:01:30Z',
       }
 
-      local result = formatter.format_step(step, true)
+      local defaults = config.get_defaults()
+      local result = formatter.format_step(step, true, defaults.history.icons)
       assert.matches('└─ ✓ Deploy', result)
       assert.matches('1m 30s', result)
     end)
@@ -259,7 +291,8 @@ describe('history.ui.formatter', function()
         completedAt = '2025-10-19T10:00:15Z',
       }
 
-      local result = formatter.format_step(step, false)
+      local defaults = config.get_defaults()
+      local result = formatter.format_step(step, false, defaults.history.icons)
       assert.matches('├─ ✗ Run tests', result)
       assert.matches('15s', result)
     end)
@@ -273,7 +306,8 @@ describe('history.ui.formatter', function()
         completedAt = nil,
       }
 
-      local result = formatter.format_step(step, true)
+      local defaults = config.get_defaults()
+      local result = formatter.format_step(step, true, defaults.history.icons)
       assert.matches('└─ ⊘ Deploy', result)
       assert.matches('%(skipped%)', result)
     end)
@@ -287,7 +321,8 @@ describe('history.ui.formatter', function()
         completedAt = nil,
       }
 
-      local result = formatter.format_step(step, false)
+      local defaults = config.get_defaults()
+      local result = formatter.format_step(step, false, defaults.history.icons)
       assert.matches('├─ ⊙ Build', result)
       assert.matches('%(running%)', result)
     end)
@@ -301,8 +336,10 @@ describe('history.ui.formatter', function()
         completedAt = '2025-10-19T10:00:08Z',
       }
 
+      local defaults = config.get_defaults()
       local custom_icons = { success = '[V]' }
-      local result = formatter.format_step(step, false, custom_icons)
+      local icons = config.merge_icons(defaults.history.icons, custom_icons)
+      local result = formatter.format_step(step, false, icons)
       assert.matches('%[V%]', result)
       assert.matches('Test', result)
       assert.not_matches('✓', result)

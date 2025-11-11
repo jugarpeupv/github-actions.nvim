@@ -5,6 +5,7 @@ local highlighter = require('github-actions.history.ui.highlighter')
 local cursor_tracker = require('github-actions.history.ui.cursor_tracker')
 local loading_indicator = require('github-actions.history.ui.loading_indicator')
 local log_viewer = require('github-actions.history.ui.log_viewer')
+local config = require('github-actions.config')
 
 local M = {}
 
@@ -309,7 +310,8 @@ end
 ---@param custom_highlights? HistoryHighlights Custom highlight configuration
 local function apply_highlights(bufnr, runs, custom_highlights)
   -- Merge custom highlights with defaults
-  local highlights = formatter.merge_highlights(custom_highlights)
+  local defaults = config.get_defaults()
+  local highlights = config.merge_highlights(defaults.history.highlights, custom_highlights)
 
   -- Delegate to highlighter module
   highlighter.apply_highlights(bufnr, runs, highlights)
@@ -342,6 +344,10 @@ function M.render(bufnr, runs, custom_icons, custom_highlights)
     custom_highlights = custom_highlights,
   }
 
+  -- Merge icons with defaults
+  local defaults = config.get_defaults()
+  local icons = config.merge_icons(defaults.history.icons, custom_icons)
+
   -- Make buffer modifiable temporarily
   vim.bo[bufnr].modifiable = true
 
@@ -359,18 +365,18 @@ function M.render(bufnr, runs, custom_icons, custom_highlights)
   else
     -- Add each run
     for _, run in ipairs(runs) do
-      table.insert(lines, formatter.format_run(run, nil, custom_icons))
+      table.insert(lines, formatter.format_run(run, nil, icons))
 
       -- If run is expanded and has jobs, render them
       if run.expanded and run.jobs then
         for _, job in ipairs(run.jobs) do
-          table.insert(lines, formatter.format_job(job, custom_icons))
+          table.insert(lines, formatter.format_job(job, icons))
 
           -- Render steps for this job
           if job.steps then
             for step_idx, step in ipairs(job.steps) do
               local is_last = step_idx == #job.steps
-              table.insert(lines, formatter.format_step(step, is_last, custom_icons))
+              table.insert(lines, formatter.format_step(step, is_last, icons))
             end
           end
         end

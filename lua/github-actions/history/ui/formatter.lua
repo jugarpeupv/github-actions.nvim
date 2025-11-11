@@ -2,102 +2,12 @@ local time = require('github-actions.lib.time')
 
 local M = {}
 
--- Default options
-M.default_options = {
-  icons = {
-    success = '✓',
-    failure = '✗',
-    cancelled = '⊘',
-    skipped = '⊘',
-    in_progress = '⊙',
-    queued = '○',
-    waiting = '○',
-    unknown = '?',
-  },
-  highlights = {
-    success = 'GitHubActionsHistorySuccess',
-    failure = 'GitHubActionsHistoryFailure',
-    cancelled = 'GitHubActionsHistoryCancelled',
-    running = 'GitHubActionsHistoryRunning',
-    queued = 'GitHubActionsHistoryQueued',
-    run_id = 'GitHubActionsHistoryRunId',
-    branch = 'GitHubActionsHistoryBranch',
-    time = 'GitHubActionsHistoryTime',
-    header = 'GitHubActionsHistoryHeader',
-    separator = 'GitHubActionsHistorySeparator',
-    job_name = 'GitHubActionsHistoryJobName',
-    step_name = 'GitHubActionsHistoryStepName',
-    tree_prefix = 'GitHubActionsHistoryTreePrefix',
-  },
-}
-
----@class HistoryIcons
----@field success? string Icon for successful runs
----@field failure? string Icon for failed runs
----@field cancelled? string Icon for cancelled runs
----@field skipped? string Icon for skipped runs
----@field in_progress? string Icon for in-progress runs
----@field queued? string Icon for queued runs
----@field waiting? string Icon for waiting runs
----@field unknown? string Icon for unknown status runs
-
----@class HistoryHighlights
----@field success? string Highlight group for successful runs
----@field failure? string Highlight group for failed runs
----@field cancelled? string Highlight group for cancelled runs
----@field running? string Highlight group for running runs
----@field queued? string Highlight group for queued runs
----@field run_id? string Highlight group for run ID
----@field branch? string Highlight group for branch name
----@field time? string Highlight group for time information
----@field header? string Highlight group for header
----@field separator? string Highlight group for separator
----@field job_name? string Highlight group for job name
----@field step_name? string Highlight group for step name
----@field tree_prefix? string Highlight group for tree prefixes (├─, └─)
-
----Merge custom icons with default icons
----@param custom_icons? HistoryIcons Custom icon configuration
----@return table merged_icons Merged icon configuration
-local function merge_icons(custom_icons)
-  if not custom_icons then
-    return M.default_options.icons
-  end
-
-  local merged = vim.deepcopy(M.default_options.icons)
-  for key, value in pairs(custom_icons) do
-    if value ~= nil then
-      merged[key] = value
-    end
-  end
-  return merged
-end
-
----Merge custom highlights with default highlights
----@param custom_highlights? HistoryHighlights Custom highlight configuration
----@return table merged_highlights Merged highlight configuration
-function M.merge_highlights(custom_highlights)
-  if not custom_highlights then
-    return M.default_options.highlights
-  end
-
-  local merged = vim.deepcopy(M.default_options.highlights)
-  for key, value in pairs(custom_highlights) do
-    if value ~= nil then
-      merged[key] = value
-    end
-  end
-  return merged
-end
-
 ---Get status icon for a run
 ---@param status string Run status ("completed"|"in_progress"|"queued")
 ---@param conclusion string|nil Run conclusion ("success"|"failure"|"cancelled"|"skipped"|nil)
----@param custom_icons? HistoryIcons Custom icon configuration
+---@param icons HistoryIcons Icon configuration (should be pre-merged with defaults)
 ---@return string Icon
-function M.get_status_icon(status, conclusion, custom_icons)
-  local icons = merge_icons(custom_icons)
-
+function M.get_status_icon(status, conclusion, icons)
   if status == 'completed' and conclusion then
     return icons[conclusion] or icons.unknown
   end
@@ -108,10 +18,10 @@ end
 ---Format a workflow run for display
 ---@param run table Run object with databaseId, displayTitle, headBranch, status, conclusion, createdAt, updatedAt
 ---@param current_time? number Current time (for testing)
----@param custom_icons? HistoryIcons Custom icon configuration
+---@param icons HistoryIcons Icon configuration (should be pre-merged with defaults)
 ---@return string Formatted run string
-function M.format_run(run, current_time, custom_icons)
-  local icon = M.get_status_icon(run.status, run.conclusion, custom_icons)
+function M.format_run(run, current_time, icons)
+  local icon = M.get_status_icon(run.status, run.conclusion, icons)
   local id = '#' .. run.databaseId
   local branch = run.headBranch .. ':'
   local title = run.displayTitle
@@ -136,10 +46,10 @@ end
 
 ---Format a job for display
 ---@param job table Job object with name, status, conclusion, startedAt, completedAt
----@param custom_icons? HistoryIcons Custom icon configuration
+---@param icons HistoryIcons Icon configuration (should be pre-merged with defaults)
 ---@return string Formatted job string
-function M.format_job(job, custom_icons)
-  local icon = M.get_status_icon(job.status, job.conclusion, custom_icons)
+function M.format_job(job, icons)
+  local icon = M.get_status_icon(job.status, job.conclusion, icons)
   local name = 'Job: ' .. job.name
 
   -- Calculate duration
@@ -160,10 +70,10 @@ end
 ---Format a step for display
 ---@param step table Step object with name, status, conclusion, startedAt, completedAt
 ---@param is_last boolean Whether this is the last step in the job
----@param custom_icons? HistoryIcons Custom icon configuration
+---@param icons HistoryIcons Icon configuration (should be pre-merged with defaults)
 ---@return string Formatted step string
-function M.format_step(step, is_last, custom_icons)
-  local icon = M.get_status_icon(step.status, step.conclusion, custom_icons)
+function M.format_step(step, is_last, icons)
+  local icon = M.get_status_icon(step.status, step.conclusion, icons)
   local prefix = is_last and '└─' or '├─'
 
   -- Calculate duration

@@ -8,41 +8,11 @@
 ---@field is_latest boolean Whether the current version is the latest
 ---@field error? string Error message if version check failed
 
----@class VirtualTextIcons
----@field outdated? string Icon for outdated versions (default: " ")
----@field latest? string Icon for latest versions (default: " ")
----@field error? string Icon for errors (default: " ")
-
----@class VirtualTextOptions
----@field icons? VirtualTextIcons Icons for version status
----@field highlight_latest? string Highlight for latest (default: "GitHubActionsVersionLatest")
----@field highlight_outdated? string Highlight for outdated (default: "GitHubActionsVersionOutdated")
----@field highlight_error? string Highlight for errors (default: "GitHubActionsVersionError")
----@field highlight_icon_latest? string Highlight for latest icon (default: "GitHubActionsIconLatest")
----@field highlight_icon_outdated? string Highlight for outdated icon (default: "GitHubActionsIconOutdated")
----@field highlight_icon_error? string Highlight for error icon (default: "GitHubActionsIconError")
-
 ---@class Display
 local M = {}
 
 -- Namespace for version virtual text
 local namespace_id = nil
-
--- Default options based on docs/design.md
----@type VirtualTextOptions
-M.default_options = {
-  icons = {
-    outdated = '',
-    latest = '',
-    error = '',
-  },
-  highlight_latest = 'GitHubActionsVersionLatest',
-  highlight_outdated = 'GitHubActionsVersionOutdated',
-  highlight_error = 'GitHubActionsVersionError',
-  highlight_icon_latest = 'GitHubActionsIconLatest',
-  highlight_icon_outdated = 'GitHubActionsIconOutdated',
-  highlight_icon_error = 'GitHubActionsIconError',
-}
 
 ---Get or create the namespace for virtual text
 ---@return number namespace_id
@@ -51,49 +21,6 @@ function M.get_namespace()
     namespace_id = vim.api.nvim_create_namespace('github_actions_virtual_text')
   end
   return namespace_id
-end
-
----Merge user options with defaults
----@param opts? VirtualTextOptions User options
----@return table merged_opts
-local function merge_opts(opts)
-  if not opts then
-    return vim.deepcopy(M.default_options)
-  end
-
-  local merged = vim.deepcopy(M.default_options)
-
-  if opts.icons then
-    if opts.icons.outdated ~= nil then
-      merged.icons.outdated = opts.icons.outdated
-    end
-    if opts.icons.latest ~= nil then
-      merged.icons.latest = opts.icons.latest
-    end
-    if opts.icons.error ~= nil then
-      merged.icons.error = opts.icons.error
-    end
-  end
-  if opts.highlight_latest then
-    merged.highlight_latest = opts.highlight_latest
-  end
-  if opts.highlight_outdated then
-    merged.highlight_outdated = opts.highlight_outdated
-  end
-  if opts.highlight_error then
-    merged.highlight_error = opts.highlight_error
-  end
-  if opts.highlight_icon_latest then
-    merged.highlight_icon_latest = opts.highlight_icon_latest
-  end
-  if opts.highlight_icon_outdated then
-    merged.highlight_icon_outdated = opts.highlight_icon_outdated
-  end
-  if opts.highlight_icon_error then
-    merged.highlight_icon_error = opts.highlight_icon_error
-  end
-
-  return merged
 end
 
 ---Build virtual text chunks
@@ -129,14 +56,14 @@ end
 ---Set version text for a single action in a buffer
 ---@param bufnr number Buffer number
 ---@param version_info VersionInfo Version information for the action
----@param opts? VirtualTextOptions Display options
+---@param opts VirtualTextOptions Display options (should be pre-merged with defaults)
 function M.set_version_text(bufnr, version_info, opts)
   -- Validate buffer
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
 
-  local merged_opts = merge_opts(opts)
+  local merged_opts = opts
   local ns = M.get_namespace()
 
   -- Build virtual text
@@ -154,7 +81,7 @@ end
 ---Set version text for multiple actions in a buffer
 ---@param bufnr number Buffer number
 ---@param version_infos VersionInfo[] List of version information
----@param opts? VirtualTextOptions Display options
+---@param opts VirtualTextOptions Display options (should be pre-merged with defaults)
 function M.set_version_texts(bufnr, version_infos, opts)
   -- Validate buffer
   if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -182,7 +109,7 @@ end
 ---Clear and display version information (high-level UI function)
 ---@param bufnr number Buffer number
 ---@param version_infos VersionInfo[]|nil List of version information
----@param opts? VirtualTextOptions Display options
+---@param opts VirtualTextOptions Display options (should be pre-merged with defaults)
 function M.show_versions(bufnr, version_infos, opts)
   -- Validate buffer
   if not vim.api.nvim_buf_is_valid(bufnr) then

@@ -8,6 +8,7 @@ local helpers = require('spec.helpers.buffer_spec')
 describe('display', function()
   ---@type Display
   local display = require('github-actions.versions.ui.display')
+  local config = require('github-actions.config')
   ---@type number
   local test_bufnr = helpers.create_yaml_buffer([[
 name: Test
@@ -35,7 +36,8 @@ jobs:
         is_latest = true,
       }
 
-      display.set_version_text(test_bufnr, version_info)
+      local defaults = config.get_defaults()
+      display.set_version_text(test_bufnr, version_info, defaults.actions)
 
       -- Get extmarks to verify virtual text was set
       local ns = display.get_namespace()
@@ -91,7 +93,8 @@ jobs:
         is_latest = false,
       }
 
-      display.set_version_text(test_bufnr, version_info)
+      local defaults = config.get_defaults()
+      display.set_version_text(test_bufnr, version_info, defaults.actions)
 
       local ns = display.get_namespace()
       local marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, { details = true })
@@ -120,7 +123,8 @@ jobs:
 
       -- Should not throw error with invalid buffer
       assert.has.no.errors(function()
-        display.set_version_text(999999, version_info)
+        local defaults = config.get_defaults()
+        display.set_version_text(999999, version_info, defaults.actions)
       end)
     end)
 
@@ -131,7 +135,8 @@ jobs:
         error = 'Failed to fetch version',
       }
 
-      display.set_version_text(test_bufnr, version_info)
+      local defaults = config.get_defaults()
+      display.set_version_text(test_bufnr, version_info, defaults.actions)
 
       local ns = display.get_namespace()
       local marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, { details = true })
@@ -179,7 +184,8 @@ jobs:
         },
       }
 
-      display.set_version_texts(test_bufnr, version_infos)
+      local defaults = config.get_defaults()
+      display.set_version_texts(test_bufnr, version_infos, defaults.actions)
 
       local ns = display.get_namespace()
       local marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, { details = true })
@@ -193,7 +199,8 @@ jobs:
 
     it('should handle empty version_infos array', function()
       assert.has.no.errors(function()
-        display.set_version_texts(test_bufnr, {})
+        local defaults = config.get_defaults()
+        display.set_version_texts(test_bufnr, {}, defaults.actions)
       end)
 
       local ns = display.get_namespace()
@@ -213,7 +220,8 @@ jobs:
         is_latest = false,
       }
 
-      display.set_version_text(test_bufnr, version_info)
+      local defaults = config.get_defaults()
+      display.set_version_text(test_bufnr, version_info, defaults.actions)
 
       -- Verify mark exists
       local ns = display.get_namespace()
@@ -245,12 +253,14 @@ jobs:
         is_latest = false,
       }
 
-      local opts = {
+      local defaults = config.get_defaults()
+      local custom_opts = {
         icons = {
           outdated = '⚠',
           latest = '✓',
         },
       }
+      local opts = vim.tbl_deep_extend('force', defaults.actions, custom_opts)
 
       display.set_version_text(test_bufnr, version_info, opts)
 
@@ -274,11 +284,13 @@ jobs:
         is_latest = false,
       }
 
-      local opts = {
+      local defaults = config.get_defaults()
+      local custom_opts = {
         highlight_icon_outdated = 'CustomOutdatedIcon',
         highlight_icon_latest = 'CustomLatestIcon',
         highlight_icon_error = 'CustomErrorIcon',
       }
+      local opts = vim.tbl_deep_extend('force', defaults.actions, custom_opts)
 
       display.set_version_text(test_bufnr, version_info, opts)
 
@@ -303,9 +315,11 @@ jobs:
         is_latest = true,
       }
 
-      local opts = {
+      local defaults = config.get_defaults()
+      local custom_opts = {
         highlight_icon_latest = 'CustomLatestIcon',
       }
+      local opts = vim.tbl_deep_extend('force', defaults.actions, custom_opts)
 
       display.set_version_text(test_bufnr, version_info, opts)
 
@@ -328,9 +342,11 @@ jobs:
         error = 'Test error',
       }
 
-      local opts = {
+      local defaults = config.get_defaults()
+      local custom_opts = {
         highlight_icon_error = 'CustomErrorIcon',
       }
+      local opts = vim.tbl_deep_extend('force', defaults.actions, custom_opts)
 
       display.set_version_text(test_bufnr, version_info, opts)
 
@@ -366,7 +382,8 @@ jobs:
         },
       }
 
-      display.show_versions(test_bufnr, version_infos)
+      local defaults = config.get_defaults()
+      display.show_versions(test_bufnr, version_infos, defaults.actions)
 
       local ns = display.get_namespace()
       local marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, {})
@@ -375,7 +392,8 @@ jobs:
 
     it('should handle empty version infos', function()
       assert.has.no.errors(function()
-        display.show_versions(test_bufnr, {})
+        local defaults = config.get_defaults()
+        display.show_versions(test_bufnr, {}, defaults.actions)
       end)
     end)
 
@@ -391,7 +409,8 @@ jobs:
       }
 
       assert.has.no.errors(function()
-        display.show_versions(999999, version_infos)
+        local defaults = config.get_defaults()
+        display.show_versions(999999, version_infos, defaults.actions)
       end)
     end)
   end)
@@ -409,7 +428,8 @@ jobs:
         },
       }
 
-      display.show_versions(test_bufnr, version_infos)
+      local defaults = config.get_defaults()
+      display.show_versions(test_bufnr, version_infos, defaults.actions)
 
       local ns = display.get_namespace()
       local marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, {})
@@ -418,7 +438,8 @@ jobs:
       -- Simulate: action line is deleted, parser returns empty list
       -- In real usage, this is triggered by TextChanged/BufWritePost autocmds
       local empty_version_infos = {}
-      display.show_versions(test_bufnr, empty_version_infos)
+      local defaults = config.get_defaults()
+      display.show_versions(test_bufnr, empty_version_infos, defaults.actions)
 
       -- Extmark should be removed because show_versions clears all extmarks first
       marks = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, {})
@@ -437,7 +458,8 @@ jobs:
         },
       }
 
-      display.show_versions(test_bufnr, version_infos_before)
+      local defaults = config.get_defaults()
+      display.show_versions(test_bufnr, version_infos_before, defaults.actions)
 
       local ns = display.get_namespace()
       local marks_before = vim.api.nvim_buf_get_extmarks(test_bufnr, ns, 0, -1, {})
@@ -456,7 +478,8 @@ jobs:
         },
       }
 
-      display.show_versions(test_bufnr, version_infos_after)
+      local defaults = config.get_defaults()
+      display.show_versions(test_bufnr, version_infos_after, defaults.actions)
 
       -- Should have only one extmark on the new line
       -- show_versions clears all old extmarks and creates new ones

@@ -65,8 +65,8 @@ The plugin automatically activates when you open:
 Version information is displayed inline at the end of each line using
 virtual text:
 >
-    - uses: actions/checkout@v4   v5.0.0 (latest)
-    - uses: actions/setup-node@v3   v4.1.0 (outdated)
+    - uses: actions/checkout@v5      v5.0.0
+    - uses: actions/setup-node@v3    v4.0.0
 <
 
 4.2 Workflow Dispatch~

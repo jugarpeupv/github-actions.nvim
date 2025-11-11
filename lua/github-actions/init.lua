@@ -1,22 +1,11 @@
----@class HistoryOptions
----@field highlight_colors? HistoryHighlightOptions Highlight color options for workflow history display (global setup)
----@field highlights? HistoryHighlights Highlight group names for workflow history display (per-buffer)
----@field icons? HistoryIcons Icon options for workflow history display
----@field logs_fold_by_default? boolean Whether to fold log groups by default (default: true)
-
----@class GithubActionsConfig
----@field actions? VirtualTextOptions Display options for GitHub Actions version checking
----@field history? HistoryOptions Options for workflow history display
-
 ---@class GithubActions
 local M = {}
 
 local versions = require('github-actions.versions')
 local dispatch = require('github-actions.dispatch')
 local history = require('github-actions.history')
-local display = require('github-actions.versions.ui.display')
 local highlights = require('github-actions.lib.highlights')
-local formatter = require('github-actions.history.ui.formatter')
+local cfg = require('github-actions.config')
 
 ---Current configuration
 ---@type GithubActionsConfig
@@ -31,14 +20,8 @@ function M.setup(opts)
   local history_highlight_colors = opts.history and opts.history.highlight_colors or nil
   highlights.setup(history_highlight_colors)
 
-  -- Build default configuration (must be done here to get current default_options)
-  local default_config = {
-    actions = vim.deepcopy(display.default_options),
-    history = vim.deepcopy(formatter.default_options),
-  }
-
   -- Merge user config with defaults
-  config = vim.tbl_deep_extend('force', default_config, opts)
+  config = cfg.merge_with_defaults(opts)
 end
 
 ---Get current configuration

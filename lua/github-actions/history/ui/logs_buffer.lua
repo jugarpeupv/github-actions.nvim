@@ -34,7 +34,7 @@ local function focus_or_create_window(bufnr, opts)
 
   -- Set up folding options for the window
   opts = opts or {}
-  local fold_by_default = opts.logs_fold_by_default == nil and true or opts.logs_fold_by_default
+  local fold_by_default = opts.logs_fold_by_default
 
   vim.wo.foldmethod = 'expr'
   vim.wo.foldexpr = 'v:lua.require("github-actions.history.ui.logs_buffer").foldexpr(v:lnum)'
@@ -78,7 +78,7 @@ end
 ---Create or reuse a logs buffer and window
 ---@param title string Title for the logs (e.g., "build / Run tests")
 ---@param run_id number The workflow run ID
----@param opts? table Options for log buffer (logs_fold_by_default: boolean)
+---@param opts? table Options for log buffer (should be pre-merged with defaults, includes logs_fold_by_default)
 ---@return number bufnr The buffer number
 ---@return number winnr The window number
 ---@return boolean is_existing Whether the buffer already existed
