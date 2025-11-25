@@ -179,6 +179,20 @@ it using the setup function:
           running = { fg = '#f59e0b', bold = true },
           queued = { fg = '#8b5cf6', bold = true },
         },
+        keymaps = {
+          list = {
+            close = 'q',
+            expand = 'l',
+            collapse = 'h',
+            refresh = 'r',
+            rerun = 'R',
+            dispatch = 'd',
+            watch = 'w',
+          },
+          logs = {
+            close = 'q',
+          },
+        },
         logs_fold_by_default = true,
       },
     })
@@ -201,6 +215,23 @@ history.highlights                         *github-actions-history-highlights*
 history.highlight_colors               *github-actions-history-highlight-colors*
     Custom highlight options for workflow history elements.
     Each key accepts a table with highlight options (fg, bg, bold, italic, etc.).
+
+history.keymaps                               *github-actions-history-keymaps*
+    Custom keymaps for history buffers. Contains two sub-tables:
+
+    keymaps.list~
+        Keymaps for the workflow run list buffer:
+        - close: Close the buffer (default: 'q')
+        - expand: Expand/collapse run or view logs (default: 'l')
+        - collapse: Collapse expanded run (default: 'h')
+        - refresh: Refresh history (default: 'r')
+        - rerun: Rerun workflow (default: 'R')
+        - dispatch: Dispatch workflow (default: 'd')
+        - watch: Watch running workflow (default: 'w')
+
+    keymaps.logs~
+        Keymaps for the logs buffer:
+        - close: Close the buffer (default: 'q')
 
 history.logs_fold_by_default       *github-actions-history-logs-fold-by-default*
     Whether to fold log groups by default. Default: true
@@ -298,13 +329,14 @@ When telescope.nvim is installed, the workflow picker provides these keymaps:
 8.2 Workflow History Buffer~
                                                 *github-actions-history-buffer*
 
-The workflow history buffer provides these keymaps:
+The workflow history buffer provides these default keymaps (customizable via
+|github-actions-history-keymaps|):
 
-    <CR>        Expand/collapse a workflow run, or view job logs
+    l           Expand/collapse a workflow run, or view job logs
                 - On a run line: expand to show jobs and steps
                 - On a job line: open log buffer for that job
 
-    <BS>        Collapse the expanded run
+    h           Collapse the expanded run
 
     r           Refresh the workflow run history
                 Fetches the latest runs from GitHub API
@@ -312,10 +344,10 @@ The workflow history buffer provides these keymaps:
     R           Rerun the workflow at cursor
                 Triggers a rerun of the selected workflow run
 
-    D           Dispatch the current workflow
+    d           Dispatch the current workflow
                 Opens workflow dispatch with inputs and branch selection
 
-    W           Watch a running workflow
+    w           Watch a running workflow
                 - Only available for in_progress or queued runs
                 - Opens a terminal running `gh run watch <run-id>`
                 - Returns focus to history buffer in normal mode
@@ -328,13 +360,13 @@ The workflow history buffer provides these keymaps:
 
 The log buffer provides these keymaps for navigating logs:
 
-    q           Close the log buffer
+    q           Close the log buffer (customizable via |github-actions-history-keymaps|)
 
-    za          Toggle fold (open/close)
+    za          Toggle fold (open/close) - Vim standard keymap
 
-    zo          Open fold
+    zo          Open fold - Vim standard keymap
 
-    zc          Close fold
+    zc          Close fold - Vim standard keymap
 
 8.4 Example Keymap Configuration~
 

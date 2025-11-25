@@ -77,19 +77,19 @@ describe('history.ui.runs_buffer', function()
       assert.is_true(has_R_keymap, 'Should have "R" keymap to rerun workflow')
     end)
 
-    it('should set up D keymap for dispatch', function()
+    it('should set up d keymap for dispatch', function()
       local bufnr, _ = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
 
-      -- Check that 'D' keymap exists
+      -- Check that 'd' keymap exists
       local keymaps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
-      local has_D_keymap = false
+      local has_d_keymap = false
       for _, map in ipairs(keymaps) do
-        if map.lhs == 'D' then
-          has_D_keymap = true
+        if map.lhs == 'd' then
+          has_d_keymap = true
           break
         end
       end
-      assert.is_true(has_D_keymap, 'Should have "D" keymap to dispatch workflow')
+      assert.is_true(has_d_keymap, 'Should have "d" keymap to dispatch workflow')
     end)
 
     it('should store workflow_file in buffer data', function()
@@ -385,22 +385,22 @@ describe('history.ui.runs_buffer', function()
   end)
 
   describe('watch run functionality', function()
-    it('should set up W keymap for watching runs', function()
+    it('should set up w keymap for watching runs', function()
       local bufnr, _ = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
 
-      -- Check that 'W' keymap exists
+      -- Check that 'w' keymap exists
       local keymaps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
       local has_w_keymap = false
       for _, map in ipairs(keymaps) do
-        if map.lhs == 'W' then
+        if map.lhs == 'w' then
           has_w_keymap = true
           break
         end
       end
-      assert.is_true(has_w_keymap, 'Should have "W" keymap to watch run')
+      assert.is_true(has_w_keymap, 'Should have "w" keymap to watch run')
     end)
 
-    it('should show help text mentioning W keymap', function()
+    it('should show help text mentioning w keymap', function()
       local bufnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       local runs = {
@@ -419,8 +419,8 @@ describe('history.ui.runs_buffer', function()
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       local content = table.concat(lines, '\n')
 
-      -- Help text should mention W keymap
-      assert.matches('W watch', content)
+      -- Help text should mention w keymap
+      assert.matches('w watch', content)
     end)
 
     it('should allow watching queued runs', function()
@@ -469,7 +469,7 @@ describe('history.ui.runs_buffer', function()
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
       -- First line should contain keymap help text
-      assert.matches('<CR> expand', lines[1])
+      assert.matches('l expand', lines[1])
       assert.matches('q close', lines[1])
     end)
 

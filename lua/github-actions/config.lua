@@ -37,10 +37,27 @@
 ---@field step_name? string Highlight group for step name
 ---@field tree_prefix? string Highlight group for tree prefixes (├─, └─)
 
+---@class HistoryListKeymaps
+---@field close? string Key to close the buffer (default: 'q')
+---@field expand? string Key to expand/collapse run or view logs (default: '<CR>')
+---@field collapse? string Key to collapse expanded run (default: '<BS>')
+---@field refresh? string Key to refresh history (default: 'r')
+---@field rerun? string Key to rerun workflow (default: 'R')
+---@field dispatch? string Key to dispatch workflow (default: 'D')
+---@field watch? string Key to watch running workflow (default: 'W')
+
+---@class HistoryLogsKeymaps
+---@field close? string Key to close the buffer (default: 'q')
+
+---@class HistoryKeymaps
+---@field list? HistoryListKeymaps Keymaps for the workflow run list buffer
+---@field logs? HistoryLogsKeymaps Keymaps for the logs buffer
+
 ---@class HistoryOptions
 ---@field highlight_colors? HistoryHighlightOptions Highlight color options for workflow history display (global setup)
 ---@field highlights? HistoryHighlights Highlight group names for workflow history display (per-buffer)
 ---@field icons? HistoryIcons Icon options for workflow history display
+---@field keymaps? HistoryKeymaps Keymap options for history buffers
 ---@field logs_fold_by_default? boolean Whether to fold log groups by default (default: true)
 
 ---@class GithubActionsConfig
@@ -90,6 +107,20 @@ local defaults = {
       job_name = 'GitHubActionsHistoryJobName',
       step_name = 'GitHubActionsHistoryStepName',
       tree_prefix = 'GitHubActionsHistoryTreePrefix',
+    },
+    keymaps = {
+      list = {
+        close = 'q',
+        expand = 'l',
+        collapse = 'h',
+        refresh = 'r',
+        rerun = 'R',
+        dispatch = 'd',
+        watch = 'w',
+      },
+      logs = {
+        close = 'q',
+      },
     },
     logs_fold_by_default = true,
   },

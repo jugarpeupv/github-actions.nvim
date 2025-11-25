@@ -98,6 +98,21 @@ require('github-actions').setup({
       running = { fg = '#f59e0b', bold = true },     -- Highlight for running runs
       queued = { fg = '#8b5cf6', bold = true },      -- Highlight for queued runs
     },
+    -- Optional: customize keymaps for history buffers
+    keymaps = {
+      list = {                -- Workflow run list buffer
+        close = 'q',          -- Close the buffer
+        expand = 'l',         -- Expand/collapse run or view logs
+        collapse = 'h',       -- Collapse expanded run
+        refresh = 'r',        -- Refresh history
+        rerun = 'R',          -- Rerun workflow
+        dispatch = 'd',       -- Dispatch workflow
+        watch = 'w',          -- Watch running workflow
+      },
+      logs = {                -- Logs buffer
+        close = 'q',          -- Close the buffer
+      },
+    },
   },
 })
 ```
@@ -147,13 +162,13 @@ The `:GithubActionsWatch` command allows you to monitor running workflow executi
 
 #### Run History Buffer
 
-1. Press `<CR>` on a workflow run to expand/collapse jobs and steps
-2. Press `<CR>` on a job to view its logs in a new buffer
-3. Press `<BS>` to collapse an expanded run
+1. Press `l` on a workflow run to expand/collapse jobs and steps
+2. Press `l` on a job to view its logs in a new buffer
+3. Press `h` to collapse an expanded run
 4. Press `r` to refresh the workflow run history
 5. Press `R` to rerun the workflow at cursor
-6. Press `D` to dispatch the current workflow (with inputs and branch selection)
-7. Press `W` to watch a running workflow (only for in_progress or queued runs)
+6. Press `d` to dispatch the current workflow (with inputs and branch selection)
+7. Press `w` to watch a running workflow (only for in_progress or queued runs)
    - Opens a terminal running `gh run watch <run-id>`
    - Returns focus to history buffer in normal mode
    - Auto-refreshes history when watch completes

@@ -18,9 +18,10 @@ local buffer_data = {}
 ---@param workflow_file string Workflow file name (e.g., "ci.yml")
 ---@param workflow_filepath string Full path to workflow file (e.g., ".github/workflows/ci.yml")
 ---@param open_in_new_tab? boolean Whether to open in a new tab (default: true)
+---@param custom_keymaps? HistoryListKeymaps Custom keymap configuration
 ---@return number bufnr Buffer number
 ---@return number winnr Window number
-function M.create_buffer(workflow_file, workflow_filepath, open_in_new_tab)
+function M.create_buffer(workflow_file, workflow_filepath, open_in_new_tab, custom_keymaps)
   if open_in_new_tab == nil then
     open_in_new_tab = true
   end
@@ -67,14 +68,19 @@ function M.create_buffer(workflow_file, workflow_filepath, open_in_new_tab)
   local winnr = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(winnr, bufnr)
 
-  -- Initialize buffer data with workflow_file and workflow_filepath
+  -- Get keymaps from config (use custom if provided, otherwise defaults)
+  local defaults = config.get_defaults()
+  local keymaps = vim.tbl_deep_extend('force', defaults.history.keymaps.list, custom_keymaps or {})
+
+  -- Initialize buffer data with workflow_file, workflow_filepath, and keymaps
   buffer_data[bufnr] = {
     workflow_file = workflow_file,
     workflow_filepath = workflow_filepath,
+    keymaps = keymaps,
   }
 
   -- Set up keymaps
-  M.setup_keymaps(bufnr)
+  M.setup_keymaps(bufnr, keymaps)
 
   -- Clean up buffer data when buffer is deleted
   vim.api.nvim_create_autocmd('BufDelete', {
@@ -308,21 +314,22 @@ end
 
 ---Set up keymaps for the buffer
 ---@param bufnr number Buffer number
-function M.setup_keymaps(bufnr)
+---@param keymaps HistoryListKeymaps Keymap configuration
+function M.setup_keymaps(bufnr, keymaps)
   local opts = { buffer = bufnr, noremap = true, silent = true }
 
-  -- Close buffer with 'q'
-  vim.keymap.set('n', 'q', function()
+  -- Close buffer
+  vim.keymap.set('n', keymaps.close, function()
     vim.api.nvim_buf_delete(bufnr, { force = true })
   end, opts)
 
-  -- Toggle expand/collapse with <CR>
-  vim.keymap.set('n', '<CR>', function()
+  -- Toggle expand/collapse
+  vim.keymap.set('n', keymaps.expand, function()
     toggle_expand(bufnr)
   end, opts)
 
-  -- Collapse with <BS>
-  vim.keymap.set('n', '<BS>', function()
+  -- Collapse
+  vim.keymap.set('n', keymaps.collapse, function()
     local data = buffer_data[bufnr]
     if not data or not data.runs then
       return
@@ -340,23 +347,23 @@ function M.setup_keymaps(bufnr)
     end
   end, opts)
 
-  -- Refresh with 'r'
-  vim.keymap.set('n', 'r', function()
+  -- Refresh
+  vim.keymap.set('n', keymaps.refresh, function()
     refresh_history(bufnr)
   end, opts)
 
-  -- Rerun with 'R'
-  vim.keymap.set('n', 'R', function()
+  -- Rerun
+  vim.keymap.set('n', keymaps.rerun, function()
     rerun_run(bufnr)
   end, opts)
 
-  -- Dispatch workflow with 'D'
-  vim.keymap.set('n', 'D', function()
+  -- Dispatch workflow
+  vim.keymap.set('n', keymaps.dispatch, function()
     dispatch_workflow(bufnr)
   end, opts)
 
-  -- Watch running workflow with 'W'
-  vim.keymap.set('n', 'W', function()
+  -- Watch running workflow
+  vim.keymap.set('n', keymaps.watch, function()
     watch_run(bufnr)
   end, opts)
 end
@@ -393,17 +400,29 @@ function M.show_loading(bufnr)
   vim.bo[bufnr].modifiable = false
 end
 
+---Generate help text based on configured keymaps
+---@param keymaps HistoryListKeymaps Keymap configuration
+---@return string help_text Help text for the buffer
+local function generate_help_text(keymaps)
+  -- stylua: ignore
+  return string.format(
+    '%s expand/view logs, %s collapse, %s refresh, %s rerun, %s dispatch, %s watch, %s close',
+    keymaps.expand, keymaps.collapse, keymaps.refresh, keymaps.rerun, keymaps.dispatch, keymaps.watch, keymaps.close
+  )
+end
+
 ---Render run list in the buffer
 ---@param bufnr number Buffer number
 ---@param runs table[] List of run objects
 ---@param custom_icons? HistoryIcons Custom icon configuration
 ---@param custom_highlights? HistoryHighlights Custom highlight configuration
 function M.render(bufnr, runs, custom_icons, custom_highlights)
-  -- Store buffer data for keymap handlers, preserving workflow_file and workflow_filepath
+  -- Store buffer data for keymap handlers, preserving workflow_file, workflow_filepath, and keymaps
   local existing_data = buffer_data[bufnr] or {}
   buffer_data[bufnr] = {
     workflow_file = existing_data.workflow_file,
     workflow_filepath = existing_data.workflow_filepath,
+    keymaps = existing_data.keymaps,
     runs = runs,
     custom_icons = custom_icons,
     custom_highlights = custom_highlights,
@@ -418,9 +437,9 @@ function M.render(bufnr, runs, custom_icons, custom_highlights)
 
   local lines = {}
 
-  -- Add keymap help text at the top
-  -- stylua: ignore
-  table.insert(lines, '<CR> expand/view logs, <BS> collapse, r refresh, R rerun, D dispatch, W watch, q close')
+  -- Add keymap help text at the top (using configured keymaps)
+  local keymaps = existing_data.keymaps or defaults.history.keymaps.list
+  table.insert(lines, generate_help_text(keymaps))
   table.insert(lines, '')
 
   if #runs == 0 then

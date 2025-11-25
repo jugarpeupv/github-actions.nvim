@@ -90,8 +90,12 @@ make check
   - `fetch_logs()`: Fetches logs for a specific job
   - `rerun()`: Reruns a workflow run using `gh run rerun`
 - `ui/runs_buffer.lua`: Manages the history buffer display
-  - Keymaps: `<CR>` expand/logs, `<BS>` collapse, `r` refresh, `R` rerun, `D` dispatch, `W` watch, `q` close
+  - Keymaps are customizable via `config.history.keymaps.list`
+  - Default: `l` expand/logs, `h` collapse, `r` refresh, `R` rerun, `d` dispatch, `w` watch, `q` close
   - Stores `workflow_filepath` for dispatch functionality
+- `ui/logs_buffer.lua`: Manages the logs buffer display
+  - Keymaps are customizable via `config.history.keymaps.logs`
+  - Default: `q` close (fold keymaps use Vim standard)
 
 **Dispatch Module (`lua/github-actions/dispatch/`)**
 - `init.lua`: Entry point for workflow dispatch

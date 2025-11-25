@@ -8,12 +8,14 @@ local M = {}
 ---@param workflow_filepath string Workflow file path (absolute or relative)
 ---@param custom_icons? HistoryIcons Custom icon configuration
 ---@param custom_highlights? HistoryHighlights Custom highlight configuration
-local function show_history_for_file(workflow_filepath, custom_icons, custom_highlights)
+---@param custom_keymaps? HistoryKeymaps Custom keymap configuration
+local function show_history_for_file(workflow_filepath, custom_icons, custom_highlights, custom_keymaps)
   -- Extract filename from path
   local workflow_file = workflow_filepath:match('[^/]+%.ya?ml$')
 
   -- Create buffer first and show loading message
-  local hist_bufnr, _ = runs_buffer.create_buffer(workflow_file, workflow_filepath, true)
+  local list_keymaps = custom_keymaps and custom_keymaps.list or nil
+  local hist_bufnr, _ = runs_buffer.create_buffer(workflow_file, workflow_filepath, true, list_keymaps)
   runs_buffer.show_loading(hist_bufnr)
 
   -- Fetch runs in the background
@@ -50,12 +52,13 @@ end
 ---Show workflow run history
 ---Always displays a workflow file selector, allowing users to choose
 ---which workflow(s) to view history for.
----@param config? HistoryOptions History configuration
-function M.show_history(config)
-  config = config or {}
+---@param history_config? HistoryOptions History configuration
+function M.show_history(history_config)
+  history_config = history_config or {}
 
-  local custom_icons = config.icons
-  local custom_highlights = config.highlights
+  local custom_icons = history_config.icons
+  local custom_highlights = history_config.highlights
+  local custom_keymaps = history_config.keymaps
 
   -- Always show workflow file selector
   picker.select_workflow_files({
@@ -63,7 +66,7 @@ function M.show_history(config)
     on_select = function(selected_paths)
       -- Multiple selection: open all in new tabs
       for _, filepath in ipairs(selected_paths) do
-        show_history_for_file(filepath, custom_icons, custom_highlights)
+        show_history_for_file(filepath, custom_icons, custom_highlights, custom_keymaps)
       end
     end,
   })

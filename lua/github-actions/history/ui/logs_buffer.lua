@@ -1,7 +1,11 @@
 local buffer_utils = require('github-actions.shared.buffer_utils')
+local config = require('github-actions.config')
 
 ---@class LogsBuffer
 local M = {}
+
+-- Store buffer-specific data (bufnr -> { keymaps = {...} })
+local buffer_data = {}
 
 -- Cache for logs content (key: "run_id:job_id", value: {raw: string, formatted: string})
 local logs_cache = {}
@@ -121,19 +125,38 @@ function M.create_buffer(title, run_id, opts)
   -- Create window and set up folding
   local winnr = focus_or_create_window(bufnr, opts)
 
+  -- Get keymaps from config (use custom if provided, otherwise defaults)
+  local defaults = config.get_defaults()
+  local custom_keymaps = opts and opts.keymaps and opts.keymaps.logs or nil
+  local keymaps = vim.tbl_deep_extend('force', defaults.history.keymaps.logs, custom_keymaps or {})
+
+  -- Store buffer data
+  buffer_data[bufnr] = {
+    keymaps = keymaps,
+  }
+
   -- Set up keymaps
-  M.setup_keymaps(bufnr)
+  M.setup_keymaps(bufnr, keymaps)
+
+  -- Clean up buffer data when buffer is deleted
+  vim.api.nvim_create_autocmd('BufDelete', {
+    buffer = bufnr,
+    callback = function()
+      buffer_data[bufnr] = nil
+    end,
+  })
 
   return bufnr, winnr, false
 end
 
 ---Setup buffer keymaps
 ---@param bufnr number The buffer number
-function M.setup_keymaps(bufnr)
+---@param keymaps HistoryLogsKeymaps Keymap configuration
+function M.setup_keymaps(bufnr, keymaps)
   local opts = { buffer = bufnr, noremap = true, silent = true }
 
-  -- Close buffer with 'q'
-  vim.keymap.set('n', 'q', function()
+  -- Close buffer
+  vim.keymap.set('n', keymaps.close, function()
     vim.api.nvim_buf_delete(bufnr, { force = true })
   end, opts)
 end
@@ -165,14 +188,24 @@ function M.cache_logs(run_id, job_id, formatted_logs, raw_logs)
   }
 end
 
+---Generate help text based on configured keymaps
+---@param keymaps HistoryLogsKeymaps Keymap configuration
+---@return string help_text Help text for the buffer
+local function generate_help_text(keymaps)
+  return string.format('Press %s to close, za to toggle fold, zo to open fold, zc to close fold', keymaps.close)
+end
+
 ---Render logs in the buffer
 ---@param bufnr number The buffer number
 ---@param logs string The log content to display
 function M.render(bufnr, logs)
   local lines = {}
 
-  -- Add keymap help text at the top
-  table.insert(lines, 'Press q to close, za to toggle fold, zo to open fold, zc to close fold')
+  -- Add keymap help text at the top (using configured keymaps)
+  local data = buffer_data[bufnr]
+  local defaults = config.get_defaults()
+  local keymaps = (data and data.keymaps) or defaults.history.keymaps.logs
+  table.insert(lines, generate_help_text(keymaps))
   table.insert(lines, '')
 
   -- Add logs content
