@@ -43,7 +43,7 @@ end
 
 ---Dispatch workflow for a specific file
 ---@param workflow_filepath string Workflow file path (absolute or relative)
-local function dispatch_workflow_for_file(workflow_filepath)
+function M.dispatch_workflow_for_file(workflow_filepath)
   -- Open the file temporarily to parse workflow_dispatch
   local bufnr = vim.fn.bufadd(workflow_filepath)
   vim.fn.bufload(bufnr)
@@ -75,7 +75,7 @@ function M.dispatch_workflow()
   picker.select_workflow_files({
     prompt = 'Select workflow file:',
     on_select = function(selected_paths)
-      dispatch_workflow_for_file(selected_paths[1])
+      M.dispatch_workflow_for_file(selected_paths[1])
     end,
   })
 end
