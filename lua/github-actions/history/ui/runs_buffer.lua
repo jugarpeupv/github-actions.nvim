@@ -6,6 +6,7 @@ local cursor_tracker = require('github-actions.history.ui.cursor_tracker')
 local loading_indicator = require('github-actions.history.ui.loading_indicator')
 local log_viewer = require('github-actions.history.ui.log_viewer')
 local config = require('github-actions.config')
+local dispatch = require('github-actions.dispatch')
 
 local M = {}
 
@@ -15,10 +16,11 @@ local buffer_data = {}
 
 ---Create a new buffer for displaying workflow run history
 ---@param workflow_file string Workflow file name (e.g., "ci.yml")
+---@param workflow_filepath string Full path to workflow file (e.g., ".github/workflows/ci.yml")
 ---@param open_in_new_tab? boolean Whether to open in a new tab (default: true)
 ---@return number bufnr Buffer number
 ---@return number winnr Window number
-function M.create_buffer(workflow_file, open_in_new_tab)
+function M.create_buffer(workflow_file, workflow_filepath, open_in_new_tab)
   if open_in_new_tab == nil then
     open_in_new_tab = true
   end
@@ -65,9 +67,10 @@ function M.create_buffer(workflow_file, open_in_new_tab)
   local winnr = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(winnr, bufnr)
 
-  -- Initialize buffer data with workflow_file
+  -- Initialize buffer data with workflow_file and workflow_filepath
   buffer_data[bufnr] = {
     workflow_file = workflow_file,
+    workflow_filepath = workflow_filepath,
   }
 
   -- Set up keymaps
@@ -252,6 +255,57 @@ local function watch_run(bufnr)
   end
 end
 
+---Dispatch a workflow (with inputs and branch selection)
+---@param bufnr number Buffer number
+local function dispatch_workflow(bufnr)
+  local data = buffer_data[bufnr]
+  if not data or not data.workflow_filepath then
+    vim.notify('[GitHub Actions] Could not determine workflow file path', vim.log.levels.ERROR)
+    return
+  end
+
+  -- Use dispatch module to handle workflow_dispatch inputs and branch selection
+  dispatch.dispatch_workflow_for_file(data.workflow_filepath)
+end
+
+---Rerun a workflow run at cursor
+---@param bufnr number Buffer number
+local function rerun_run(bufnr)
+  local data = buffer_data[bufnr]
+  if not data or not data.runs then
+    return
+  end
+
+  local run_idx = cursor_tracker.get_run_at_cursor(bufnr, data.runs)
+  if not run_idx then
+    vim.notify('[GitHub Actions] Cursor is not on a run', vim.log.levels.WARN)
+    return
+  end
+
+  local run = data.runs[run_idx]
+
+  vim.notify(string.format('[GitHub Actions] Rerunning workflow run #%d...', run.databaseId), vim.log.levels.INFO)
+
+  history.rerun(run.databaseId, function(err)
+    vim.schedule(function()
+      if err then
+        vim.notify('[GitHub Actions] Failed to rerun: ' .. err, vim.log.levels.ERROR)
+        return
+      end
+
+      vim.notify(
+        string.format('[GitHub Actions] Workflow run #%d has been queued for rerun', run.databaseId),
+        vim.log.levels.INFO
+      )
+
+      -- Refresh the history buffer to show updated status
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        refresh_history(bufnr)
+      end
+    end)
+  end)
+end
+
 ---Set up keymaps for the buffer
 ---@param bufnr number Buffer number
 function M.setup_keymaps(bufnr)
@@ -286,9 +340,19 @@ function M.setup_keymaps(bufnr)
     end
   end, opts)
 
-  -- Refresh with 'R'
-  vim.keymap.set('n', 'R', function()
+  -- Refresh with 'r'
+  vim.keymap.set('n', 'r', function()
     refresh_history(bufnr)
+  end, opts)
+
+  -- Rerun with 'R'
+  vim.keymap.set('n', 'R', function()
+    rerun_run(bufnr)
+  end, opts)
+
+  -- Dispatch workflow with 'D'
+  vim.keymap.set('n', 'D', function()
+    dispatch_workflow(bufnr)
   end, opts)
 
   -- Watch running workflow with 'W'
@@ -335,10 +399,11 @@ end
 ---@param custom_icons? HistoryIcons Custom icon configuration
 ---@param custom_highlights? HistoryHighlights Custom highlight configuration
 function M.render(bufnr, runs, custom_icons, custom_highlights)
-  -- Store buffer data for keymap handlers, preserving workflow_file
+  -- Store buffer data for keymap handlers, preserving workflow_file and workflow_filepath
   local existing_data = buffer_data[bufnr] or {}
   buffer_data[bufnr] = {
     workflow_file = existing_data.workflow_file,
+    workflow_filepath = existing_data.workflow_filepath,
     runs = runs,
     custom_icons = custom_icons,
     custom_highlights = custom_highlights,
@@ -354,10 +419,8 @@ function M.render(bufnr, runs, custom_icons, custom_highlights)
   local lines = {}
 
   -- Add keymap help text at the top
-  table.insert(
-    lines,
-    'Press <CR> to expand run / view job logs, <BS> to collapse, R to refresh, W to watch run, q to close'
-  )
+  -- stylua: ignore
+  table.insert(lines, '<CR> expand/view logs, <BS> collapse, r refresh, R rerun, D dispatch, W watch, q close')
   table.insert(lines, '')
 
   if #runs == 0 then

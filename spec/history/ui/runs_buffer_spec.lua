@@ -15,7 +15,7 @@ describe('history.ui.runs_buffer', function()
 
   describe('create_buffer', function()
     it('should create a buffer with correct options', function()
-      local bufnr, winnr = runs_buffer.create_buffer('test.yml')
+      local bufnr, winnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       assert.is.not_nil(bufnr)
       assert.is.not_nil(winnr)
@@ -33,7 +33,7 @@ describe('history.ui.runs_buffer', function()
     end)
 
     it('should set up keymaps', function()
-      local bufnr, _ = runs_buffer.create_buffer('ci.yml')
+      local bufnr, _ = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
 
       -- Check that 'q' keymap exists
       local keymaps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
@@ -47,23 +47,53 @@ describe('history.ui.runs_buffer', function()
       assert.is_true(has_q_keymap, 'Should have "q" keymap to close buffer')
     end)
 
-    it('should set up R keymap for refresh', function()
-      local bufnr, _ = runs_buffer.create_buffer('ci.yml')
+    it('should set up r keymap for refresh', function()
+      local bufnr, _ = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
 
-      -- Check that 'R' keymap exists
+      -- Check that 'r' keymap exists
       local keymaps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
       local has_r_keymap = false
       for _, map in ipairs(keymaps) do
-        if map.lhs == 'R' then
+        if map.lhs == 'r' then
           has_r_keymap = true
           break
         end
       end
-      assert.is_true(has_r_keymap, 'Should have "R" keymap to refresh buffer')
+      assert.is_true(has_r_keymap, 'Should have "r" keymap to refresh buffer')
+    end)
+
+    it('should set up R keymap for rerun', function()
+      local bufnr, _ = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
+
+      -- Check that 'R' keymap exists
+      local keymaps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
+      local has_R_keymap = false
+      for _, map in ipairs(keymaps) do
+        if map.lhs == 'R' then
+          has_R_keymap = true
+          break
+        end
+      end
+      assert.is_true(has_R_keymap, 'Should have "R" keymap to rerun workflow')
+    end)
+
+    it('should set up D keymap for dispatch', function()
+      local bufnr, _ = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
+
+      -- Check that 'D' keymap exists
+      local keymaps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
+      local has_D_keymap = false
+      for _, map in ipairs(keymaps) do
+        if map.lhs == 'D' then
+          has_D_keymap = true
+          break
+        end
+      end
+      assert.is_true(has_D_keymap, 'Should have "D" keymap to dispatch workflow')
     end)
 
     it('should store workflow_file in buffer data', function()
-      local bufnr, _ = runs_buffer.create_buffer('ci.yml')
+      local bufnr, _ = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
 
       -- Render some data to ensure buffer_data is populated
       local runs = {
@@ -89,7 +119,7 @@ describe('history.ui.runs_buffer', function()
 
   describe('render', function()
     it('should render run list in buffer', function()
-      local bufnr, _ = runs_buffer.create_buffer('test.yml')
+      local bufnr, _ = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       local runs = {
         {
@@ -129,7 +159,7 @@ describe('history.ui.runs_buffer', function()
     end)
 
     it('should handle empty run list', function()
-      local bufnr = runs_buffer.create_buffer('test.yml')
+      local bufnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       runs_buffer.render(bufnr, {})
 
@@ -144,7 +174,7 @@ describe('history.ui.runs_buffer', function()
 
   describe('expand/collapse state management', function()
     it('should track expanded state for runs', function()
-      local _ = runs_buffer.create_buffer('test.yml')
+      local _ = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       local runs = {
         {
@@ -208,7 +238,7 @@ describe('history.ui.runs_buffer', function()
   describe('buffer reuse behavior', function()
     it('should not switch windows when buffer is already displayed', function()
       -- Create initial buffer in first tab
-      local bufnr1, winnr1 = runs_buffer.create_buffer('test.yml')
+      local bufnr1, winnr1 = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
       assert.is_not_nil(bufnr1)
       assert.is_not_nil(winnr1)
       local initial_tab = vim.api.nvim_get_current_tabpage()
@@ -223,7 +253,7 @@ describe('history.ui.runs_buffer', function()
 
       -- Call create_buffer again from the new tab
       -- This should NOT switch back to the first tab/window
-      local bufnr2, winnr2 = runs_buffer.create_buffer('test.yml')
+      local bufnr2, winnr2 = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       -- Should return the same buffer
       assert.equals(bufnr1, bufnr2)
@@ -244,13 +274,13 @@ describe('history.ui.runs_buffer', function()
 
     it('should create new window when buffer exists but not displayed', function()
       -- Create buffer
-      local bufnr1, _ = runs_buffer.create_buffer('test.yml', false)
+      local bufnr1, _ = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml', false)
 
       -- Hide the buffer (wipe it by closing all windows in the tab)
       vim.cmd('bdelete! ' .. bufnr1)
 
       -- Create the buffer again - should create new buffer since old one was wiped
-      local bufnr2, winnr2 = runs_buffer.create_buffer('test.yml')
+      local bufnr2, winnr2 = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       assert.is_not_nil(bufnr2)
       assert.is_not_nil(winnr2)
@@ -261,7 +291,7 @@ describe('history.ui.runs_buffer', function()
 
   describe('render with expanded runs', function()
     it('should render expanded jobs and steps', function()
-      local bufnr = runs_buffer.create_buffer('test.yml')
+      local bufnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       local runs = {
         {
@@ -319,7 +349,7 @@ describe('history.ui.runs_buffer', function()
     end)
 
     it('should not render jobs when not expanded', function()
-      local bufnr = runs_buffer.create_buffer('test.yml')
+      local bufnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       local runs = {
         {
@@ -356,7 +386,7 @@ describe('history.ui.runs_buffer', function()
 
   describe('watch run functionality', function()
     it('should set up W keymap for watching runs', function()
-      local bufnr, _ = runs_buffer.create_buffer('ci.yml')
+      local bufnr, _ = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
 
       -- Check that 'W' keymap exists
       local keymaps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
@@ -371,7 +401,7 @@ describe('history.ui.runs_buffer', function()
     end)
 
     it('should show help text mentioning W keymap', function()
-      local bufnr = runs_buffer.create_buffer('test.yml')
+      local bufnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       local runs = {
         {
@@ -390,11 +420,11 @@ describe('history.ui.runs_buffer', function()
       local content = table.concat(lines, '\n')
 
       -- Help text should mention W keymap
-      assert.matches('W to watch run', content)
+      assert.matches('W watch', content)
     end)
 
     it('should allow watching queued runs', function()
-      local bufnr = runs_buffer.create_buffer('test.yml')
+      local bufnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       local runs = {
         {
@@ -420,7 +450,7 @@ describe('history.ui.runs_buffer', function()
 
   describe('keymap help text position', function()
     it('should display keymap help text at the top of the buffer', function()
-      local bufnr = runs_buffer.create_buffer('test.yml')
+      local bufnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       local runs = {
         {
@@ -439,12 +469,12 @@ describe('history.ui.runs_buffer', function()
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
       -- First line should contain keymap help text
-      assert.matches('Press <CR>', lines[1])
-      assert.matches('q to close', lines[1])
+      assert.matches('<CR> expand', lines[1])
+      assert.matches('q close', lines[1])
     end)
 
     it('should have empty line after help text', function()
-      local bufnr = runs_buffer.create_buffer('test.yml')
+      local bufnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
 
       local runs = {
         {

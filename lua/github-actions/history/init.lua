@@ -13,7 +13,7 @@ local function show_history_for_file(workflow_filepath, custom_icons, custom_hig
   local workflow_file = workflow_filepath:match('[^/]+%.ya?ml$')
 
   -- Create buffer first and show loading message
-  local hist_bufnr, _ = runs_buffer.create_buffer(workflow_file, true)
+  local hist_bufnr, _ = runs_buffer.create_buffer(workflow_file, workflow_filepath, true)
   runs_buffer.show_loading(hist_bufnr)
 
   -- Fetch runs in the background
