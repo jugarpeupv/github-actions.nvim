@@ -2,7 +2,7 @@
 
 A Neovim plugin for managing GitHub Actions workflows directly from Neovim.
 
-<img width="923" height="534" alt="image" src="https://github.com/user-attachments/assets/47128a5b-f0d7-4f67-a226-238aa7e876a2" />
+https://github.com/user-attachments/assets/c4566feb-c9c3-4a58-93d0-e6902c447a03
 
 ## Features
 
