@@ -97,12 +97,14 @@ end
 
 ---Fetch logs for a specific job using GitHub REST API
 ---Uses gh api with {owner}/{repo} placeholders (auto-resolved by gh cli)
+---Passes --allow-escape-sequences since job logs commonly contain ANSI color codes,
+---which gh api refuses to output by default.
 ---@param _ number Workflow run ID (unused, kept for API compatibility)
 ---@param job_id number Job ID (databaseId)
 ---@param callback fun(logs: string|nil, err: string|nil) Callback with logs text or error
 function M.fetch_logs(_, job_id, callback)
   local api_path = string.format('repos/{owner}/{repo}/actions/jobs/%d/logs', job_id)
-  vim.system({ 'gh', 'api', api_path }, { text = true }, function(result)
+  vim.system({ 'gh', 'api', '--allow-escape-sequences', api_path }, { text = true }, function(result)
     vim.schedule(function()
       if result.code ~= 0 then
         callback(nil, result.stderr)
