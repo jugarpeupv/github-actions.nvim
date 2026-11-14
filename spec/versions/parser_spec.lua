@@ -55,6 +55,18 @@ jobs:
           },
         },
         {
+          name = 'actions stored in repository subdirectories',
+          content = [[
+jobs:
+  test:
+    steps:
+      - uses: github/codeql-action/upload-sarif@v3
+]],
+          expected = {
+            { owner = 'github', repo = 'codeql-action', version = 'v3', line = 3 },
+          },
+        },
+        {
           name = 'actions with trailing comments',
           content = [[
 jobs:
@@ -91,6 +103,24 @@ jobs:
               hash = 'a5ac7e51b41094c92402da3b24376905380afc29',
               version = 'v4.1.6',
               line = 4,
+            },
+          },
+        },
+        {
+          name = 'comment with multiple # only keeps the first segment as version',
+          content = [[
+jobs:
+  test:
+    steps:
+      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6 # JIRA-1234
+]],
+          expected = {
+            {
+              owner = 'actions',
+              repo = 'checkout',
+              hash = 'a5ac7e51b41094c92402da3b24376905380afc29',
+              version = 'v4.1.6',
+              line = 3,
             },
           },
         },

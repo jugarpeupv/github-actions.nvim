@@ -7,12 +7,31 @@ local github = require('github-actions.shared.github')
 local picker = require('github-actions.shared.picker')
 local branch_picker = require('github-actions.dispatch.branch_picker')
 
+local function notify_cancelled()
+  vim.notify('[GitHub Actions] Workflow dispatch cancelled', vim.log.levels.INFO)
+end
+
+---Ask whether to watch the dispatched run and start watching on 'y'
+---@param workflow_file string Workflow filename
+local function prompt_watch_after_dispatch(workflow_file)
+  vim.ui.input({ prompt = 'Watch this workflow run? (y/N): ' }, function(answer)
+    vim.schedule(function()
+      if answer == nil or answer:lower() ~= 'y' then
+        return
+      end
+      -- Required lazily: github-actions/init.lua requires this module at load time
+      require('github-actions').watch_dispatched_workflow(workflow_file)
+    end)
+  end)
+end
+
 ---Handle branch selection callback
 ---@param workflow_file string Workflow filename
 ---@param inputs table Workflow inputs configuration
 ---@param selected_branch string|nil Selected branch
 local function handle_branch_selection(workflow_file, inputs, selected_branch)
   if not selected_branch then
+    notify_cancelled()
     return
   end
 
@@ -27,6 +46,7 @@ local function handle_branch_selection(workflow_file, inputs, selected_branch)
               string.format('Workflow "%s" dispatched successfully on branch "%s"', workflow_file, selected_branch),
               vim.log.levels.INFO
             )
+            prompt_watch_after_dispatch(workflow_file)
           else
             vim.notify(string.format('Failed to dispatch workflow: %s', err or 'Unknown error'), vim.log.levels.ERROR)
           end
@@ -38,6 +58,7 @@ local function handle_branch_selection(workflow_file, inputs, selected_branch)
         vim.notify(err, vim.log.levels.ERROR)
       end)
     end,
+    on_cancel = notify_cancelled,
   })
 end
 
@@ -64,6 +85,7 @@ function M.dispatch_workflow_for_file(workflow_filepath)
     on_select = function(selected_branch)
       handle_branch_selection(workflow_file, workflow_dispatch.inputs, selected_branch)
     end,
+    on_cancel = notify_cancelled,
   })
 end
 

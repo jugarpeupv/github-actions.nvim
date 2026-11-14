@@ -49,15 +49,34 @@ function M.show_history(opts)
   history.show_history(history_config)
 end
 
----Watch running workflow execution
-function M.watch_workflow()
+---Build WatchOptions from current config merged with additional options
+---@param watch_opts? WatchOptions Additional options (merged with config.history.buffer.watch)
+---@return WatchOptions
+local function build_watch_options(watch_opts)
   local history_opts = config.history
-  ---@type WatchOptions
-  local watch_opts = {
+  local watch_cfg = vim.tbl_get(config, 'history', 'buffer', 'watch') or {}
+  local merged = vim.tbl_deep_extend('force', watch_cfg, watch_opts or {})
+  return {
     icons = history_opts and history_opts.icons,
     highlights = history_opts and history_opts.highlights,
+    open_mode = merged.open_mode,
+    window_options = merged.window_options,
+    window_geometry_options = merged.window_geometry_options,
   }
-  watch.watch_workflow(watch_opts)
+end
+
+---Watch running workflow execution
+---@param watch_opts? WatchOptions Additional options (merged with config.history.buffer.watch)
+function M.watch_workflow(watch_opts)
+  watch.watch_workflow(build_watch_options(watch_opts))
+end
+
+---Watch a run of the given workflow file, polling until a running run appears
+---@param workflow_file string Workflow filename (e.g., "ci.yml")
+---@param watch_opts? WatchOptions Additional options (merged with config.history.buffer.watch)
+function M.watch_dispatched_workflow(workflow_file, watch_opts)
+  local opts = build_watch_options(watch_opts) --[[@as WatchDispatchedOptions]]
+  watch.watch_dispatched_workflow(workflow_file, opts)
 end
 
 ---Open workflow URL(s) in browser

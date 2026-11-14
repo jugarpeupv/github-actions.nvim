@@ -48,6 +48,7 @@
 ---@field watch? string Key to watch running workflow (default: 'w')
 ---@field cancel? string Key to cancel running workflow (default: 'C')
 ---@field open_browser? string Key to open run in browser (default: '<C-o>')
+---@field copy_link? string Key to copy run/job URL to clipboard (default: 'y')
 
 ---@class HistoryLogsKeymaps
 ---@field close? string Key to close the buffer (default: 'q')
@@ -56,14 +57,28 @@
 ---@field list? HistoryListKeymaps Keymaps for the workflow run list buffer
 ---@field logs? HistoryLogsKeymaps Keymaps for the logs buffer
 
+---@class FloatWindowOptions
+---@field width? number Float window width (default: 80% of editor)
+---@field height? number Float window height (default: 80% of editor)
+---@field row? number Float window row position (default: centered)
+---@field col? number Float window column position (default: centered)
+---@field title? string The title of the float window (default: Watch | file.yml)
+
 ---@class BufferOpenOptions
----@field open_mode? string How to open buffer: "tab", "vsplit", "split", or "current"
+---@field open_mode? string How to open buffer: "tab"|"vsplit"|"split"|"current"|"float"
 ---@field buflisted? boolean Whether buffer should be listed in buffer list (default: true)
----@field window_options? table<string, any> Window-local options (e.g., {wrap = false, number = true})
+---@field window_options? (table<string, any>) Window-local options (e.g., {wrap = false})
+
+---@class WatchBufferOptions
+---@field open_mode? string How to open buffer: "tab"|"vsplit"|"split"|"current"|"float"
+---@field open_mode_history? string How to open buffer when called from history buffer
+---@field window_options? (table<string, any>) Window-local options (e.g., {wrap = false})
+---@field window_geometry_options? (FloatWindowOptions) Float geometry (e.g., {height=80, width=120})
 
 ---@class HistoryBufferOptions
 ---@field history? BufferOpenOptions History buffer options (default: open_mode="tab", window_options={wrap=true})
 ---@field logs? BufferOpenOptions Options for logs buffer (default: open_mode="vsplit", window_options={wrap=false})
+---@field watch? WatchBufferOptions Options for watch terminal (default: open_mode="tab")
 
 ---@class HistoryOptions
 ---@field highlight_colors? HistoryHighlightOptions Highlight color options for workflow history display (global setup)
@@ -71,7 +86,15 @@
 ---@field icons? HistoryIcons Icon options for workflow history display
 ---@field keymaps? HistoryKeymaps Keymap options for history buffers
 ---@field logs_fold_by_default? boolean Whether to fold log groups by default (default: true)
+---@field pr_mode? boolean Whether to show the pr history instead
 ---@field buffer? HistoryBufferOptions Buffer display options
+
+---@class WatchOptions
+---@field icons? HistoryIcons Icon configuration (reuses config.history.icons)
+---@field highlights? HistoryHighlights Highlight configuration (reuses config.history.highlights)
+---@field open_mode? string How to open watch terminal: "tab", "vsplit", "split", "current", "float"
+---@field window_options? table<string, any> Window options for float mode (width, height, row, col)
+---@field window_geometry_options? FloatWindowOptions Float window geometry: size and title
 
 ---@class GithubActionsConfig
 ---@field actions? VirtualTextOptions Display options for GitHub Actions version checking
@@ -133,12 +156,14 @@ local defaults = {
         watch = 'w',
         cancel = 'C',
         open_browser = '<C-o>',
+        copy_link = 'y',
       },
       logs = {
         close = 'q',
       },
     },
     logs_fold_by_default = true,
+    -- pr_mode = false,
     buffer = {
       history = {
         open_mode = 'tab',
@@ -154,10 +179,17 @@ local defaults = {
           wrap = false,
         },
       },
+      watch = {
+        open_mode = 'tab',
+        open_mode_history = 'vsplit',
+        window_options = {},
+        window_geometry_options = {},
+      },
     },
   },
 }
 
+-- Merged user configuration, populated by setup()
 ---Get default configuration
 ---@return GithubActionsConfig defaults Default configuration
 function M.get_defaults()

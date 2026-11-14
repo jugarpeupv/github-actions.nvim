@@ -5,10 +5,12 @@ describe('history.ui.runs_buffer', function()
   local buffer_helper = require('spec.helpers.buffer_spec')
 
   after_each(function()
-    -- Close all buffers
     for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-      if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].buftype == 'nofile' then
-        buffer_helper.delete_buffer(bufnr)
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        local name = vim.api.nvim_buf_get_name(bufnr)
+        if name:match('%[GitHub Actions%]') then
+          buffer_helper.delete_buffer(bufnr)
+        end
       end
     end
   end)
@@ -424,9 +426,11 @@ describe('history.ui.runs_buffer', function()
     end)
 
     it('should allow watching queued runs', function()
-      local bufnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
+      local bufnr, winnr = runs_buffer.create_buffer('queued_test.yml', '.github/workflows/queued_test.yml', {
+        watch_open_mode = 'tab',
+      })
 
-      local runs = {
+      runs_buffer.render(bufnr, {
         {
           databaseId = 12346,
           displayTitle = 'queued run',
@@ -435,16 +439,29 @@ describe('history.ui.runs_buffer', function()
           createdAt = '2025-10-19T10:00:00Z',
           updatedAt = '2025-10-19T10:05:00Z',
         },
-      }
+      })
 
-      runs_buffer.render(bufnr, runs)
+      vim.api.nvim_set_current_win(winnr)
+      vim.api.nvim_win_set_cursor(winnr, { 3, 0 })
 
-      -- Move cursor to the run line
-      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      local buffer_utils = require('github-actions.shared.buffer_utils')
+      local captured_mode = nil
+      local original_open_terminal = buffer_utils.open_terminal
+      buffer_utils.open_terminal = function(mode, _, _)
+        captured_mode = mode
+        return 0, 0
+      end
 
-      -- Test that queued runs can be watched (this test will pass if no error is thrown)
-      -- In actual implementation, watch_run should accept 'queued' status
-      assert.is_true(true)
+      local maps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
+      for _, m in ipairs(maps) do
+        if m.lhs == 'w' then
+          m.callback()
+          break
+        end
+      end
+      buffer_utils.open_terminal = original_open_terminal
+
+      assert.equals('tab', captured_mode, 'queued run should reach open_terminal')
     end)
   end)
 
@@ -529,6 +546,94 @@ describe('history.ui.runs_buffer', function()
     end)
   end)
 
+  describe('copy link functionality', function()
+    it('should set up y keymap for copying link', function()
+      local bufnr, _ = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
+
+      -- Check that 'y' keymap exists
+      local keymaps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
+      local has_y_keymap = false
+      for _, map in ipairs(keymaps) do
+        if map.lhs == 'y' then
+          has_y_keymap = true
+          break
+        end
+      end
+      assert.is_true(has_y_keymap, 'Should have "y" keymap to copy link')
+    end)
+
+    it('should show help text mentioning y keymap', function()
+      local bufnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
+
+      runs_buffer.render(bufnr, {
+        {
+          databaseId = 12345,
+          displayTitle = 'test run',
+          headBranch = 'main',
+          status = 'completed',
+          conclusion = 'success',
+          createdAt = '2025-10-19T10:00:00Z',
+          updatedAt = '2025-10-19T10:05:00Z',
+        },
+      })
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local content = table.concat(lines, '\n')
+
+      assert.matches('y copy', content)
+    end)
+
+    it('should copy run URL to clipboard when cursor is on a run', function()
+      local bufnr, winnr = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
+
+      runs_buffer.render(bufnr, {
+        {
+          databaseId = 12345,
+          displayTitle = 'test run',
+          headBranch = 'main',
+          status = 'completed',
+          conclusion = 'success',
+          createdAt = '2025-10-19T10:00:00Z',
+          updatedAt = '2025-10-19T10:05:00Z',
+        },
+      })
+
+      vim.api.nvim_set_current_win(winnr)
+      vim.api.nvim_win_set_cursor(winnr, { 3, 0 })
+
+      local url_module = require('github-actions.shared.url')
+      local original_get_repo_info = url_module.get_repo_info
+      url_module.get_repo_info = function(callback)
+        callback('myowner', 'myrepo', nil)
+      end
+
+      local captured_reg, captured_url = nil, nil
+      local original_setreg = vim.fn.setreg
+      vim.fn.setreg = function(reg, value)
+        captured_reg = reg
+        captured_url = value
+      end
+
+      for _, m in ipairs(vim.api.nvim_buf_get_keymap(bufnr, 'n')) do
+        if m.lhs == 'y' then
+          m.callback()
+          break
+        end
+      end
+
+      -- setreg runs inside vim.schedule, so flush the scheduled callback
+      vim.wait(100, function()
+        return captured_url ~= nil
+      end)
+
+      url_module.get_repo_info = original_get_repo_info
+      vim.fn.setreg = original_setreg
+
+      assert.equals('+', captured_reg)
+      assert.equals('https://github.com/myowner/myrepo/actions/runs/12345', captured_url)
+    end)
+  end)
+
   describe('keymap help text position', function()
     it('should display keymap help text at the top of the buffer', function()
       local bufnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml')
@@ -575,6 +680,586 @@ describe('history.ui.runs_buffer', function()
 
       -- Second line should be empty
       assert.equals('', lines[2])
+    end)
+  end)
+
+  describe('create_buffer with float mode', function()
+    it('should create a floating window with correct buffer options', function()
+      local bufnr, winnr = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml', {
+        open_mode = 'float',
+      })
+
+      assert.is.not_nil(bufnr)
+      assert.is.not_nil(winnr)
+      assert.is_true(vim.api.nvim_buf_is_valid(bufnr))
+      assert.is_true(vim.api.nvim_win_is_valid(winnr))
+
+      -- Check buffer options
+      assert.equals('nofile', vim.bo[bufnr].buftype)
+      assert.is_false(vim.bo[bufnr].modifiable)
+      assert.is_false(vim.bo[bufnr].swapfile)
+
+      -- Verify buffer is set in the window
+      assert.equals(bufnr, vim.api.nvim_win_get_buf(winnr))
+
+      -- Check buffer name
+      local bufname = vim.api.nvim_buf_get_name(bufnr)
+      assert.matches('GitHub Actions.*test%.yml', bufname)
+    end)
+
+    it('should set up keymaps in float mode', function()
+      local bufnr, _ = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml', {
+        open_mode = 'float',
+      })
+
+      local keymaps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
+      local has_q_keymap = false
+      for _, map in ipairs(keymaps) do
+        if map.lhs == 'q' then
+          has_q_keymap = true
+          break
+        end
+      end
+      assert.is_true(has_q_keymap, 'Should have "q" keymap to close buffer')
+    end)
+
+    it('should set up all keymaps in float mode', function()
+      local bufnr, _ = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml', {
+        open_mode = 'float',
+      })
+
+      local keymaps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
+      local keymap_lhs = {}
+      for _, map in ipairs(keymaps) do
+        keymap_lhs[map.lhs] = true
+      end
+
+      assert.is_true(keymap_lhs['q'], 'Should have "q" keymap')
+      assert.is_true(keymap_lhs['l'], 'Should have "l" keymap')
+      assert.is_true(keymap_lhs['h'], 'Should have "h" keymap')
+      assert.is_true(keymap_lhs['r'], 'Should have "r" keymap')
+      assert.is_true(keymap_lhs['R'], 'Should have "R" keymap')
+      assert.is_true(keymap_lhs['d'], 'Should have "d" keymap')
+      assert.is_true(keymap_lhs['w'], 'Should have "w" keymap')
+      assert.is_true(keymap_lhs['C'], 'Should have "C" keymap')
+      assert.is_true(keymap_lhs['<C-O>'], 'Should have "<C-o>" keymap')
+    end)
+
+    it('should allow reusing existing buffer in float mode', function()
+      local bufnr1, winnr1 = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml', {
+        open_mode = 'float',
+      })
+      assert.is_true(vim.api.nvim_buf_is_valid(bufnr1))
+      assert.is_true(vim.api.nvim_win_is_valid(winnr1))
+
+      local bufnr2, winnr2 = runs_buffer.create_buffer('test.yml', '.github/workflows/test.yml', {
+        open_mode = 'float',
+      })
+
+      assert.equals(bufnr1, bufnr2)
+      assert.is_true(vim.api.nvim_win_is_valid(winnr2))
+    end)
+
+    it('should open watch on float mode', function()
+      -- Use unique filename to avoid existing buffer issues from other tests
+      local bufnr, winnr = runs_buffer.create_buffer('watch_test.yml', '.github/workflows/watch_test.yml', {
+        open_mode = 'float',
+        watch_open_mode = 'float',
+      })
+
+      -- Render to populate buffer_data with a running workflow
+      runs_buffer.render(bufnr, {
+        {
+          databaseId = 12345,
+          status = 'in_progress',
+          headBranch = 'main',
+          displayTitle = 'CI',
+          createdAt = '2025-01-01T00:00:00Z',
+        },
+      })
+
+      -- Focus history float and position cursor on the run line
+      vim.api.nvim_set_current_win(winnr)
+      vim.api.nvim_win_set_cursor(winnr, { 3, 0 })
+
+      -- Verify buffer name to confirm we have a fresh buffer
+      local actual_name = vim.api.nvim_buf_get_name(bufnr)
+      assert.matches('watch_test.yml', actual_name)
+
+      -- Stub buffer_utils.open_terminal to capture the mode
+      local buffer_utils = require('github-actions.shared.buffer_utils')
+      local captured_mode = nil
+      local original_open_terminal = buffer_utils.open_terminal
+      buffer_utils.open_terminal = function(mode, ...)
+        captured_mode = mode
+        return 0, 0
+      end
+
+      -- Get the w keymap callback and trigger it
+      local maps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
+      local watch_callback = nil
+      for _, m in ipairs(maps) do
+        if m.lhs == 'w' then
+          watch_callback = m.callback
+          break
+        end
+      end
+      assert.is_not_nil(watch_callback, 'w keymap callback should be accessible')
+      watch_callback()
+
+      -- Verify open_terminal was called with the configured watch_open_mode ('float')
+      assert.is_not_nil(captured_mode, 'open_terminal should be called')
+      assert.equals(
+        'float',
+        captured_mode,
+        'open_terminal should be called with float mode, got ' .. tostring(captured_mode)
+      )
+
+      buffer_utils.open_terminal = original_open_terminal
+    end)
+
+    it('should propagate watch_window_geometry_options to open_terminal', function()
+      local geometry = { title = 'History - geo_test.yml', width = 90, height = 30 }
+      local bufnr, winnr = runs_buffer.create_buffer('geo_test.yml', '.github/workflows/geo_test.yml', {
+        open_mode = 'float',
+        watch_open_mode = 'float',
+        watch_window_geometry_options = geometry,
+      })
+
+      runs_buffer.render(bufnr, {
+        {
+          databaseId = 12345,
+          status = 'in_progress',
+          headBranch = 'main',
+          displayTitle = 'CI',
+          createdAt = '2025-01-01T00:00:00Z',
+        },
+      })
+
+      vim.api.nvim_set_current_win(winnr)
+      vim.api.nvim_win_set_cursor(winnr, { 3, 0 })
+
+      local buffer_utils = require('github-actions.shared.buffer_utils')
+      local captured_opts = nil
+      local original_open_terminal = buffer_utils.open_terminal
+      buffer_utils.open_terminal = function(_, _, opts)
+        captured_opts = opts
+        return 0, 0
+      end
+
+      local maps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
+      for _, m in ipairs(maps) do
+        if m.lhs == 'w' then
+          m.callback()
+          break
+        end
+      end
+      buffer_utils.open_terminal = original_open_terminal
+
+      assert.is_not_nil(captured_opts, 'open_terminal should be called')
+      assert.same(geometry, captured_opts.window_geometry_options)
+    end)
+
+    it('should preserve watch_window_geometry_options across render', function()
+      local geometry = { title = 'Watch - refresh_test.yml', width = 100, height = 40 }
+      local bufnr, winnr = runs_buffer.create_buffer('refresh_test.yml', '.github/workflows/refresh_test.yml', {
+        open_mode = 'float',
+        watch_open_mode = 'float',
+        watch_window_geometry_options = geometry,
+      })
+
+      -- Render twice to simulate refresh (which rebuilds buffer_data)
+      runs_buffer.render(bufnr, {})
+      runs_buffer.render(bufnr, {
+        {
+          databaseId = 99999,
+          status = 'in_progress',
+          headBranch = 'main',
+          displayTitle = 'CI',
+          createdAt = '2025-01-01T00:00:00Z',
+        },
+      })
+
+      vim.api.nvim_set_current_win(winnr)
+      vim.api.nvim_win_set_cursor(winnr, { 3, 0 })
+
+      local buffer_utils = require('github-actions.shared.buffer_utils')
+      local captured_opts = nil
+      local original_open_terminal = buffer_utils.open_terminal
+      buffer_utils.open_terminal = function(_, _, opts)
+        captured_opts = opts
+        return 0, 0
+      end
+
+      local maps = vim.api.nvim_buf_get_keymap(bufnr, 'n')
+      for _, m in ipairs(maps) do
+        if m.lhs == 'w' then
+          m.callback()
+          break
+        end
+      end
+      buffer_utils.open_terminal = original_open_terminal
+
+      assert.is_not_nil(captured_opts, 'open_terminal should be called')
+      assert.same(geometry, captured_opts.window_geometry_options)
+    end)
+
+    it('should refresh custom keymaps when create_buffer is called again on existing buffer', function()
+      local bufnr1 = runs_buffer.create_buffer('rekey.yml', '.github/workflows/rekey.yml', {
+        custom_keymaps = { close = 'q' },
+      })
+
+      runs_buffer.create_buffer('rekey.yml', '.github/workflows/rekey.yml', {
+        custom_keymaps = { close = 'x' },
+      })
+
+      local maps = vim.api.nvim_buf_get_keymap(bufnr1, 'n')
+      local has_q = false
+      local has_x = false
+      for _, m in ipairs(maps) do
+        if m.lhs == 'q' then
+          has_q = true
+        end
+        if m.lhs == 'x' then
+          has_x = true
+        end
+      end
+
+      assert.is_true(has_x, 'new close keymap "x" should be active after second create_buffer')
+      assert.is_false(has_q, 'old close keymap "q" should be removed')
+    end)
+
+    it('should refresh watch_* options when create_buffer is called again on existing buffer', function()
+      local bufnr1, winnr1 = runs_buffer.create_buffer('reuse_watch.yml', '.github/workflows/reuse_watch.yml', {
+        open_mode = 'tab',
+        watch_open_mode = 'tab',
+        watch_window_geometry_options = { title = 'Old' },
+      })
+
+      local new_geometry = { title = 'New Watch' }
+      local bufnr2 = runs_buffer.create_buffer('reuse_watch.yml', '.github/workflows/reuse_watch.yml', {
+        open_mode = 'tab',
+        watch_open_mode = 'vsplit',
+        watch_window_options = { wrap = true },
+        watch_window_geometry_options = new_geometry,
+      })
+
+      assert.equals(bufnr1, bufnr2, 'should reuse existing buffer')
+
+      runs_buffer.render(bufnr2, {
+        {
+          databaseId = 42,
+          status = 'in_progress',
+          headBranch = 'main',
+          displayTitle = 'CI',
+          createdAt = '2025-01-01T00:00:00Z',
+        },
+      })
+
+      vim.api.nvim_set_current_win(winnr1)
+      vim.api.nvim_win_set_cursor(winnr1, { 3, 0 })
+
+      local buffer_utils = require('github-actions.shared.buffer_utils')
+      local captured_mode, captured_opts = nil, nil
+      local original_open_terminal = buffer_utils.open_terminal
+      buffer_utils.open_terminal = function(mode, _, opts)
+        captured_mode = mode
+        captured_opts = opts
+        return 0, 0
+      end
+
+      local maps = vim.api.nvim_buf_get_keymap(bufnr2, 'n')
+      for _, m in ipairs(maps) do
+        if m.lhs == 'w' then
+          m.callback()
+          break
+        end
+      end
+      buffer_utils.open_terminal = original_open_terminal
+
+      assert.equals('vsplit', captured_mode, 'should use new watch_open_mode')
+      assert.same({ wrap = true }, captured_opts.window_options, 'should use new watch_window_options')
+      assert.same(new_geometry, captured_opts.window_geometry_options, 'should use new watch_window_geometry_options')
+    end)
+  end)
+
+  describe('merge_runs', function()
+    it('should carry over expand state when both old and new run are completed', function()
+      local old_runs = {
+        {
+          databaseId = 12345,
+          displayTitle = 'old title',
+          status = 'completed',
+          expanded = true,
+          jobs = { { name = 'build', status = 'completed', conclusion = 'success' } },
+        },
+      }
+      local new_runs = {
+        { databaseId = 12345, displayTitle = 'new title', status = 'completed' },
+      }
+
+      local merged = runs_buffer.merge_runs(old_runs, new_runs)
+
+      assert.same({
+        {
+          databaseId = 12345,
+          displayTitle = 'new title',
+          status = 'completed',
+          expanded = true,
+          jobs = { { name = 'build', status = 'completed', conclusion = 'success' } },
+        },
+      }, merged)
+    end)
+
+    it('should drop expand state when the new run is in_progress', function()
+      local old_runs = {
+        {
+          databaseId = 12345,
+          status = 'completed',
+          expanded = true,
+          jobs = { { name = 'build', status = 'completed', conclusion = 'success' } },
+        },
+      }
+      local new_runs = {
+        { databaseId = 12345, status = 'in_progress' },
+      }
+
+      local merged = runs_buffer.merge_runs(old_runs, new_runs)
+
+      assert.same({ { databaseId = 12345, status = 'in_progress' } }, merged)
+    end)
+
+    it('should drop expand state when the old run was in_progress', function()
+      local old_runs = {
+        {
+          databaseId = 12345,
+          status = 'in_progress',
+          expanded = true,
+          jobs = { { name = 'build', status = 'in_progress' } },
+        },
+      }
+      local new_runs = {
+        { databaseId = 12345, status = 'completed' },
+      }
+
+      local merged = runs_buffer.merge_runs(old_runs, new_runs)
+
+      assert.same({ { databaseId = 12345, status = 'completed' } }, merged)
+    end)
+
+    it('should keep newly fetched runs as is and exclude runs missing from the new list', function()
+      local old_runs = {
+        {
+          databaseId = 111,
+          status = 'completed',
+          expanded = true,
+          jobs = { { name = 'gone', status = 'completed', conclusion = 'success' } },
+        },
+        {
+          databaseId = 222,
+          status = 'completed',
+          expanded = true,
+          jobs = { { name = 'kept', status = 'completed', conclusion = 'success' } },
+        },
+      }
+      local new_runs = {
+        { databaseId = 333, status = 'completed' },
+        { databaseId = 222, status = 'completed' },
+      }
+
+      local merged = runs_buffer.merge_runs(old_runs, new_runs)
+
+      assert.same({
+        { databaseId = 333, status = 'completed' },
+        {
+          databaseId = 222,
+          status = 'completed',
+          expanded = true,
+          jobs = { { name = 'kept', status = 'completed', conclusion = 'success' } },
+        },
+      }, merged)
+    end)
+  end)
+
+  describe('refresh_history', function()
+    local api = require('github-actions.history.api')
+    local stub = require('luassert.stub')
+
+    --- Flush all pending vim.schedule callbacks
+    local function flush_scheduled()
+      vim.wait(0, function()
+        return false
+      end)
+    end
+
+    local function press_refresh(bufnr)
+      for _, m in ipairs(vim.api.nvim_buf_get_keymap(bufnr, 'n')) do
+        if m.lhs == 'r' then
+          m.callback()
+          return
+        end
+      end
+      error('refresh keymap "r" not found')
+    end
+
+    local function buffer_content(bufnr)
+      return table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+    end
+
+    local function make_run(database_id, title)
+      return {
+        databaseId = database_id,
+        displayTitle = title,
+        headBranch = 'main',
+        status = 'completed',
+        conclusion = 'success',
+        createdAt = '2025-10-19T10:00:00Z',
+        updatedAt = '2025-10-19T10:05:00Z',
+      }
+    end
+
+    ---Stub history.fetch_runs so the refresh stays in flight until the callback is invoked
+    local function stub_fetch_runs()
+      local fetch = stub(api, 'fetch_runs')
+      finally(function()
+        fetch:revert()
+      end)
+      local captured_callback
+      fetch.invokes(function(_, callback)
+        captured_callback = callback
+      end)
+      local function respond(runs, err)
+        assert(captured_callback, 'fetch_runs was never called')
+        captured_callback(runs, err)
+        flush_scheduled()
+      end
+
+      return fetch, respond
+    end
+
+    ---Collect the line and virtual text of every "refresh in flight" indicator
+    local function refreshing_indicators(bufnr)
+      local ns = vim.api.nvim_create_namespace('github-actions-refreshing')
+      local indicators = {}
+      for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, ns, 0, -1, { details = true })) do
+        table.insert(indicators, { line = mark[2], text = mark[4].virt_text[1][1] })
+      end
+      return indicators
+    end
+
+    ---Stub vim.notify and return a getter for the messages emitted so far
+    local function stub_notify()
+      local notify = stub(vim, 'notify')
+      finally(function()
+        notify:revert()
+      end)
+      return function()
+        local messages = {}
+        for _, call in ipairs(notify.calls) do
+          table.insert(messages, call.vals[1])
+        end
+        return messages
+      end
+    end
+
+    it('should mark the first line as refreshing and keep the run list while the fetch is in flight', function()
+      local bufnr, winnr = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
+      runs_buffer.render(bufnr, { make_run(12345, 'existing run') })
+      -- Put the cursor on the run line: the indicator must sit on the help line regardless
+      vim.api.nvim_set_current_win(winnr)
+      vim.api.nvim_win_set_cursor(winnr, { 3, 0 })
+      stub_notify()
+      local fetch = stub_fetch_runs()
+
+      press_refresh(bufnr)
+      local content = buffer_content(bufnr)
+
+      assert.equals(1, #fetch.calls)
+      assert.equals('ci.yml', fetch.calls[1].vals[1])
+      assert.same({ { line = 0, text = ' (Refreshing...)' } }, refreshing_indicators(bufnr))
+      assert.matches('existing run', content)
+      assert.not_matches('Refreshing%.%.%.', content)
+    end)
+
+    it('should replace the run list with fresh data and drop the refreshing mark after the fetch succeeds', function()
+      local bufnr = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
+      runs_buffer.render(bufnr, { make_run(12345, 'existing run') })
+      local notified = stub_notify()
+      local _, respond = stub_fetch_runs()
+
+      press_refresh(bufnr)
+      respond({ make_run(67890, 'fresh run') }, nil)
+      local content = buffer_content(bufnr)
+
+      assert.same({ '[GitHub Actions] Workflow runs refreshed' }, notified())
+      assert.same({}, refreshing_indicators(bufnr))
+      assert.matches('fresh run', content)
+      assert.not_matches('existing run', content)
+    end)
+
+    it('should keep the run list, drop the refreshing mark and report the error when the fetch fails', function()
+      local bufnr = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
+      runs_buffer.render(bufnr, { make_run(12345, 'existing run') })
+      local notified = stub_notify()
+      local _, respond = stub_fetch_runs()
+
+      press_refresh(bufnr)
+      respond(nil, 'gh command failed')
+      local content = buffer_content(bufnr)
+
+      assert.same({ '[GitHub Actions] Failed to refresh: gh command failed' }, notified())
+      assert.same({}, refreshing_indicators(bufnr))
+      assert.matches('existing run', content)
+    end)
+
+    it('should start a new fetch when refreshed again after a failed fetch', function()
+      local bufnr = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
+      runs_buffer.render(bufnr, { make_run(12345, 'existing run') })
+      stub_notify()
+      local fetch, respond = stub_fetch_runs()
+
+      press_refresh(bufnr)
+      respond(nil, 'gh command failed')
+      press_refresh(bufnr)
+
+      assert.equals(2, #fetch.calls)
+    end)
+
+    it('should keep expanded jobs visible for a completed run after refreshing', function()
+      local bufnr = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
+      local expanded_run = make_run(12345, 'existing run')
+      expanded_run.expanded = true
+      expanded_run.jobs = {
+        {
+          name = 'build',
+          status = 'completed',
+          conclusion = 'success',
+          startedAt = '2025-10-19T10:00:00Z',
+          completedAt = '2025-10-19T10:03:00Z',
+        },
+      }
+      runs_buffer.render(bufnr, { expanded_run })
+      stub_notify()
+      local _, respond = stub_fetch_runs()
+
+      press_refresh(bufnr)
+      respond({ make_run(12345, 'renamed run') }, nil)
+      local content = buffer_content(bufnr)
+
+      assert.matches('renamed run', content)
+      assert.matches('Job: build', content)
+    end)
+
+    it('should not start another fetch while a refresh is still in flight', function()
+      local bufnr = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
+      runs_buffer.render(bufnr, { make_run(12345, 'existing run') })
+      stub_notify()
+      local fetch = stub_fetch_runs()
+
+      press_refresh(bufnr)
+      press_refresh(bufnr)
+
+      assert.equals(1, #fetch.calls)
     end)
   end)
 end)

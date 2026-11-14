@@ -17,7 +17,7 @@ https://github.com/user-attachments/assets/c4566feb-c9c3-4a58-93d0-e6902c447a03
 
 ## Requirements
 
-- Neovim 0.9+
+- Neovim 0.10+
 - [GitHub CLI (`gh`)](https://cli.github.com/) installed and authenticated
 - [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter) with YAML parser
 - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) (optional, for enhanced workflow selection with multi-select and preview)
@@ -40,6 +40,7 @@ https://github.com/user-attachments/assets/c4566feb-c9c3-4a58-93d0-e6902c447a03
 ## How It Works
 
 The plugin automatically activates when you open:
+
 - `.github/workflows/*.yml` or `*.yaml` (workflow files)
 - `.github/actions/*/action.yml` or `*.yaml` (composite actions)
 
@@ -123,13 +124,18 @@ require('github-actions').setup({
     -- Optional: configure how buffers are opened
     buffer = {
       history = {
-        open_mode = 'tab',    -- How to open history buffer: 'tab', 'vsplit', 'split', or 'current' (default: 'tab')
+        open_mode = 'tab',    -- How to open history buffer: 'tab', 'vsplit', 'split', 'current', or 'float' (default: 'tab')
         buflisted = true,     -- Whether buffer appears in buffer list (default: true)
         window_options = {    -- Window-local options to set (default: {wrap = true})
           wrap = true,        -- Enable line wrapping
           number = true,      -- Show line numbers
           cursorline = true,  -- Highlight current line
         },
+      },
+      watch = {
+        open_mode = 'tab',    -- How to open watch buffer: 'tab', 'vsplit', 'split', 'current', or 'float' (default: 'tab')
+        open_mode_history = 'float',    -- How to open watch buffer from the history buffer: 'tab', 'vsplit', 'split', 'current', or 'float' (default: 'vsplit')
+        window_options = {},  -- Float window options: width, height, row, col (default: 80% centered)
       },
       logs = {
         open_mode = 'vsplit', -- How to open logs buffer: 'tab', 'vsplit', 'split', or 'current' (default: 'vsplit')
@@ -147,15 +153,16 @@ require('github-actions').setup({
 ## Commands
 
 - `:GithubActionsDispatch` - Dispatch the current workflow (only available in workflow files with `workflow_dispatch` trigger)
-- `:GithubActionsHistory` - Show workflow run history for the current workflow file
-- `:GithubActionsHistoryByPR` - Show workflow run history filtered by branch/PR
-- `:GithubActionsWatch` - Watch running workflow executions in real-time
+- `:GithubActionsHistory [mode]` - Show workflow run history for the current workflow file. Optional mode: `tab`, `vsplit`, `split`, `current`, `float`
+- `:GithubActionsHistoryByPR [mode]` - Show workflow run history filtered by branch/PR. Optional mode: `tab`, `vsplit`, `split`, `current`, `float`
+- `:GithubActionsWatch [mode]` - Watch running workflow executions in real-time. Optional mode: `tab`, `vsplit`, `split`, `current`, `float`
 
 ### Workflow Selection
 
 When running these commands outside of a workflow file, a picker will appear to select workflow files:
 
 **With telescope.nvim (enhanced mode):**
+
 - Use `<Tab>` to select multiple workflow files (history command only)
 - Preview window shows the content of the selected workflow file
 - Use `<C-u>` and `<C-d>` to scroll the preview window up and down
@@ -163,8 +170,23 @@ When running these commands outside of a workflow file, a picker will appear to 
 - Multiple selected workflows will open in separate tabs
 
 **Without telescope.nvim (fallback mode):**
+
 - Use `vim.ui.select` for single file selection
 - No preview or multi-select support
+
+### Workflow Dispatch Usage
+
+The `:GithubActionsDispatch` command dispatches a workflow with the `workflow_dispatch` trigger:
+
+1. Select a workflow file from the picker
+2. Select the branch to run the workflow on
+3. Enter the input parameters defined in `workflow_dispatch`
+4. After a successful dispatch, a prompt asks `Watch this workflow run? (y/N):`
+   - Enter `y` (or `Y`) to watch the dispatched run: the plugin polls for a running run of the workflow (every 2 seconds, up to 5 attempts, since GitHub takes a few seconds to register the run) and opens `gh run watch` in a terminal
+   - Any other input (or `Esc`) skips watching
+
+> [!NOTE]
+> `gh workflow run` does not return the run ID, so the plugin cannot distinguish the newly dispatched run from other runs of the same workflow. If other runs are already running, a picker appears with the newest run listed first.
 
 ### Workflow Watch Usage
 
@@ -178,10 +200,12 @@ The `:GithubActionsWatch` command allows you to monitor running workflow executi
    - If no running workflows: Display an info message
    - If exactly one running workflow: Launch `gh run watch` directly in a new tab
    - If multiple running workflows: Show a picker to select which one to watch
-4. The watch terminal opens in a new tab with `gh run watch <run-id>`
-5. Exit the terminal with `Ctrl-C` or close the tab when done
+4. The watch terminal opens with `gh run watch <run-id>` (mode: `tab`, `vsplit`, `split`, `current`, or `float`)
+5. If the watch terminal is opened from the history buffer it will open with the mode defined by open_mode_history instead, nonetheless if the history buffer has open_mode = 'float' the watch buffer will ignore open_mode_history and open in a float window (float windows do not support split or history will overlay if open_mode_history = 'tab' | 'current')
+6. Exit the terminal with `Ctrl-C` or close the tab/window when done
 
 **Run Picker Format**: `[icon] branch-name (#run-id)`
+
 - Icon shows the run status (⊙ for in_progress, ○ for queued)
 - Branch name indicates which branch triggered the workflow
 - Run ID is the GitHub workflow run identifier

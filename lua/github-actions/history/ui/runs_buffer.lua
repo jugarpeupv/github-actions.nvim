@@ -1,6 +1,7 @@
 local formatter = require('github-actions.history.ui.formatter')
 local history = require('github-actions.history.api')
 local buffer_utils = require('github-actions.shared.buffer_utils')
+local window_utils = require('github-actions.shared.window_utils')
 local highlighter = require('github-actions.history.ui.highlighter')
 local cursor_tracker = require('github-actions.history.ui.cursor_tracker')
 local loading_indicator = require('github-actions.history.ui.loading_indicator')
@@ -9,6 +10,7 @@ local config = require('github-actions.config')
 local dispatch = require('github-actions.dispatch')
 local select = require('github-actions.shared.select')
 local url_module = require('github-actions.shared.url')
+local watch_filter = require('github-actions.watch.filter')
 
 local M = {}
 
@@ -16,18 +18,33 @@ local M = {}
 -- bufnr -> { runs = {...}, custom_icons = {...}, custom_highlights = {...} }
 local buffer_data = {}
 
+-- Namespace of the "refresh in flight" virtual text, kept apart from the job loading indicator
+local REFRESHING_NAMESPACE = 'github-actions-refreshing'
+
+-- Float history forces watch into float (split-from-float is unsupported); otherwise honor user / default.
+local function resolve_watch_open_mode(open_mode, opts, watch_buffer_config)
+  return (open_mode == 'float' and 'float') or opts.watch_open_mode or watch_buffer_config.open_mode_history or 'vsplit'
+end
+
 ---Open a new window according to the specified mode
----@param mode string One of: "tab", "vsplit", "split", "current"
-function M.open_window(mode)
+---@param mode string One of: "tab", "vsplit", "split", "current", "float"
+---@param bufnr? number Buffer number to set in the window (required for float mode)
+---@param opts? TerminalOpenOptions
+function M.open_window(mode, bufnr, opts)
+  opts = opts or {}
   if mode == 'tab' then
     vim.cmd('tabnew')
   elseif mode == 'vsplit' then
     vim.cmd('vsplit')
   elseif mode == 'split' then
     vim.cmd('split')
+  elseif mode == 'float' then
+    assert(bufnr, 'bufnr is required for float mode')
+    return buffer_utils.open_float_window(bufnr, opts.window_options or {}, opts.window_geometry_options or {})
   elseif mode ~= 'current' then
     vim.cmd('tabnew')
   end
+  return vim.api.nvim_get_current_win()
 end
 
 ---Create a new buffer for displaying workflow run history
@@ -42,6 +59,7 @@ function M.create_buffer(workflow_file, workflow_filepath, opts)
   -- Get config defaults
   local defaults = config.get_defaults()
   local history_buffer_config = vim.tbl_get(defaults, 'history', 'buffer', 'history') or {}
+  local watch_buffer_config = vim.tbl_get(defaults, 'history', 'buffer', 'watch') or {}
 
   -- Extract options with defaults
   local open_mode = opts.open_mode or history_buffer_config.open_mode
@@ -55,34 +73,50 @@ function M.create_buffer(workflow_file, workflow_filepath, opts)
   -- Check if buffer with this name already exists
   local existing_bufnr = vim.fn.bufnr(bufname)
   if existing_bufnr ~= -1 and vim.api.nvim_buf_is_valid(existing_bufnr) then
+    -- Buffer is already displayed in a window
+    -- Return the buffer and window where it's displayed without switching to it
+    -- The subsequent render() call will update the buffer content
+    if buffer_data[existing_bufnr] then
+      local data = buffer_data[existing_bufnr]
+      data.open_mode = open_mode
+      data.window_options = window_options
+      data.watch_open_mode = resolve_watch_open_mode(open_mode, opts, watch_buffer_config)
+      data.watch_window_options = opts.watch_window_options or watch_buffer_config.window_options
+      data.watch_window_geometry_options = opts.watch_window_geometry_options
+        or watch_buffer_config.window_geometry_options
+
+      -- Refresh keymaps so a different custom_keymaps takes effect on re-open.
+      -- Old lhs values are deleted first so renames (e.g. close='q' -> close='x') don't leave stale bindings.
+      local default_list_keymaps = assert(defaults.history.keymaps.list, 'default list keymaps must exist')
+      local new_keymaps = vim.tbl_deep_extend('force', default_list_keymaps, opts.custom_keymaps or {})
+      if data.keymaps then
+        for _, lhs in pairs(data.keymaps) do
+          pcall(vim.api.nvim_buf_del_keymap, existing_bufnr, 'n', lhs)
+        end
+      end
+      data.keymaps = new_keymaps
+      M.setup_keymaps(existing_bufnr, new_keymaps)
+    end
+
     -- Buffer exists, find its window across all tab pages
     local winid = buffer_utils.find_window_for_buffer(existing_bufnr)
     if winid then
-      -- Buffer is already displayed in a window
-      -- Return the buffer and window where it's displayed without switching to it
-      -- The subsequent render() call will update the buffer content
-      -- Apply window options to existing window
-      if window_options then
+      if window_options and open_mode ~= 'float' then
         vim.api.nvim_win_call(winid, function()
-          for option, value in pairs(window_options) do
-            vim.wo[option] = value
-          end
+          window_utils.set_window_options(winid, window_options)
         end)
       end
-      return existing_bufnr, winid
     else
-      -- Buffer exists but not displayed, open it according to open_mode
-      M.open_window(open_mode)
-      local new_winid = vim.api.nvim_get_current_win()
-      vim.api.nvim_win_set_buf(new_winid, existing_bufnr)
+      M.open_window(open_mode, existing_bufnr)
+      winid = vim.api.nvim_get_current_win()
+      vim.api.nvim_win_set_buf(winid, existing_bufnr)
+
       -- Apply window options to new window
       if window_options then
-        for option, value in pairs(window_options) do
-          vim.wo[new_winid][option] = value
-        end
+        window_utils.set_window_options(winid, window_options)
       end
-      return existing_bufnr, new_winid
     end
+    return existing_bufnr, winid
   end
 
   -- Create a new buffer (listed by default to avoid [No Name] buffers)
@@ -98,27 +132,30 @@ function M.create_buffer(workflow_file, workflow_filepath, opts)
   vim.api.nvim_buf_set_name(bufnr, bufname)
 
   -- Open buffer according to open_mode
-  M.open_window(open_mode)
-  local winnr = vim.api.nvim_get_current_win()
+  local winnr = M.open_window(open_mode, bufnr)
   vim.api.nvim_win_set_buf(winnr, bufnr)
 
-  -- Apply window options to window
-  if window_options then
-    for option, value in pairs(window_options) do
-      vim.wo[winnr][option] = value
-    end
+  -- Apply window options to window (only for non-floating windows)
+  if window_options and open_mode ~= 'float' then
+    window_utils.set_window_options(winnr, window_options)
   end
 
   -- Get keymaps from config (use custom if provided, otherwise defaults)
   local default_list_keymaps = assert(defaults.history.keymaps.list, 'default list keymaps must exist')
   local keymaps = vim.tbl_deep_extend('force', default_list_keymaps, custom_keymaps or {})
 
-  -- Initialize buffer data with workflow_file, workflow_filepath, keymaps, and branch
+  local watch_open_mode = resolve_watch_open_mode(open_mode, opts, watch_buffer_config)
+
   buffer_data[bufnr] = {
     workflow_file = workflow_file,
     workflow_filepath = workflow_filepath,
     keymaps = keymaps,
     branch = branch,
+    open_mode = open_mode,
+    window_options = window_options,
+    watch_open_mode = watch_open_mode,
+    watch_window_options = opts.watch_window_options or watch_buffer_config.window_options,
+    watch_window_geometry_options = opts.watch_window_geometry_options or watch_buffer_config.window_geometry_options,
   }
 
   -- Set up keymaps
@@ -179,28 +216,57 @@ local function toggle_expand(bufnr)
     -- Show loading indicator
     loading_indicator.show(bufnr)
 
-    -- Need to fetch jobs first
+    -- Need to fetch jobs first.
+    -- `history.fetch_jobs` already wraps its callback in `vim.schedule`, so we can
+    -- touch buffer APIs synchronously here. Guard against the buffer being closed
+    -- between the keymap press and the API response, mirroring `refresh_history`.
     history.fetch_jobs(run.databaseId, function(jobs_response, err)
-      if err then
-        -- Clear loading indicator and show error
-        vim.schedule(function()
-          loading_indicator.clear(bufnr)
-          M.render(bufnr, data.runs, data.custom_icons, data.custom_highlights)
-          vim.notify('[GitHub Actions] Failed to fetch jobs: ' .. err, vim.log.levels.ERROR)
-        end)
+      if not vim.api.nvim_buf_is_valid(bufnr) then
         return
       end
 
+      if err then
+        loading_indicator.clear(bufnr)
+        M.render(bufnr, data.runs, data.custom_icons, data.custom_highlights)
+        vim.notify('[GitHub Actions] Failed to fetch jobs: ' .. err, vim.log.levels.ERROR)
+        return
+      end
+
+      loading_indicator.clear(bufnr)
+
       if jobs_response and jobs_response.jobs then
-        vim.schedule(function()
-          loading_indicator.clear(bufnr)
-          run.jobs = jobs_response.jobs
-          run.expanded = true
-          M.render(bufnr, data.runs, data.custom_icons, data.custom_highlights)
-        end)
+        run.jobs = jobs_response.jobs
+        run.expanded = true
+        M.render(bufnr, data.runs, data.custom_icons, data.custom_highlights)
+      else
+        M.render(bufnr, data.runs, data.custom_icons, data.custom_highlights)
+        vim.notify('[GitHub Actions] Unexpected jobs response format', vim.log.levels.ERROR)
       end
     end)
   end
+end
+
+---Carry over the expand state of currently displayed runs into freshly fetched runs.
+---Only completed runs keep their state: a run that is (or was) in progress may have
+---stale jobs, and toggle_expand skips re-fetching whenever run.jobs is present.
+---@param old_runs table[] Currently displayed runs
+---@param new_runs table[] Freshly fetched runs (mutated in place)
+---@return table[] new_runs
+function M.merge_runs(old_runs, new_runs)
+  local old_by_id = {}
+  for _, run in ipairs(old_runs) do
+    old_by_id[run.databaseId] = run
+  end
+
+  for _, run in ipairs(new_runs) do
+    local old_run = old_by_id[run.databaseId]
+    if old_run and old_run.status == 'completed' and run.status == 'completed' then
+      run.expanded = old_run.expanded
+      run.jobs = old_run.jobs
+    end
+  end
+
+  return new_runs
 end
 
 ---Refresh workflow run history
@@ -213,13 +279,13 @@ local function refresh_history(bufnr)
     return
   end
 
+  -- Ignore repeated refreshes: concurrent fetches could render out of order
+  if data.refreshing then
+    return
+  end
+
   local custom_icons = data.custom_icons
   local custom_highlights = data.custom_highlights
-
-  -- Show loading indicator
-  vim.bo[bufnr].modifiable = true
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { 'Refreshing workflow runs...' })
-  vim.bo[bufnr].modifiable = false
 
   -- Choose fetch method based on mode (branch mode vs workflow mode)
   local fetch_func
@@ -237,12 +303,21 @@ local function refresh_history(bufnr)
     return
   end
 
+  -- Keep the current list on screen while fetching; it is replaced once fresh data arrives.
+  -- The indicator uses its own namespace so expanding a job meanwhile does not clear it.
+  data.refreshing = true
+  loading_indicator.show(bufnr, { line = 0, text = ' (Refreshing...)', namespace = REFRESHING_NAMESPACE })
+
   -- Fetch fresh data from GitHub API
   fetch_func(fetch_arg, function(runs, err)
     vim.schedule(function()
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return
       end
+
+      -- Release before render: render replaces buffer_data[bufnr] with a new table
+      data.refreshing = false
+      loading_indicator.clear(bufnr, REFRESHING_NAMESPACE)
 
       if err then
         vim.notify('[GitHub Actions] Failed to refresh: ' .. err, vim.log.levels.ERROR)
@@ -254,8 +329,8 @@ local function refresh_history(bufnr)
         return
       end
 
-      -- Re-render with fresh data
-      M.render(bufnr, runs, custom_icons, custom_highlights)
+      -- Re-render with fresh data, keeping the expand state of completed runs
+      M.render(bufnr, M.merge_runs(data.runs or {}, runs), custom_icons, custom_highlights)
       vim.notify('[GitHub Actions] Workflow runs refreshed', vim.log.levels.INFO)
     end)
   end)
@@ -277,10 +352,10 @@ local function watch_run(bufnr)
 
   local run = data.runs[run_idx]
 
-  -- Check if run is watchable (in_progress or queued runs)
-  if run.status ~= 'in_progress' and run.status ~= 'queued' then
+  -- Check if run is watchable (any non-terminal status — keep in sync with watch.filter)
+  if not watch_filter.ACTIVE_STATUSES[run.status] then
     local message = string.format(
-      '[GitHub Actions] Run #%d is %s. Only in-progress or queued runs can be watched.',
+      '[GitHub Actions] Run #%d is %s. Only active (non-completed) runs can be watched.',
       run.databaseId,
       run.status
     )
@@ -288,33 +363,21 @@ local function watch_run(bufnr)
     return
   end
 
-  -- Store the current window to return focus later
   local history_winid = vim.api.nvim_get_current_win()
+  local mode = data.watch_open_mode or 'tab'
 
-  -- Execute gh run watch in a terminal with auto-refresh on exit
-  local cmd = string.format('gh run watch %d', run.databaseId)
-  vim.cmd('new | terminal ' .. cmd)
-
-  -- Set up autocmd to refresh history buffer when terminal exits
-  local term_bufnr = vim.api.nvim_get_current_buf()
-  ---@diagnostic disable-next-line: param-type-mismatch
-  vim.api.nvim_create_autocmd('TermClose', {
-    buffer = term_bufnr,
-    once = true,
-    callback = function()
-      vim.schedule(function()
-        -- Only refresh if the original buffer still exists
-        if vim.api.nvim_buf_is_valid(bufnr) then
-          refresh_history(bufnr)
-        end
-      end)
+  buffer_utils.open_terminal(mode, { 'gh', 'run', 'watch', tostring(run.databaseId) }, {
+    window_options = data.watch_window_options,
+    window_geometry_options = data.watch_window_geometry_options,
+    on_exit = function()
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        refresh_history(bufnr)
+      end
     end,
   })
 
-  -- Return focus to history buffer window and ensure normal mode
-  if vim.api.nvim_win_is_valid(history_winid) then
+  if mode ~= 'float' and vim.api.nvim_win_is_valid(history_winid) then
     vim.api.nvim_set_current_win(history_winid)
-    -- Stop insert mode if it was activated by terminal startinsert
     vim.cmd('stopinsert')
   end
 end
@@ -414,10 +477,10 @@ local function cancel_run(bufnr)
 
   local run = data.runs[run_idx]
 
-  -- Check if run is cancellable (only in_progress or queued runs can be cancelled)
-  if run.status ~= 'in_progress' and run.status ~= 'queued' then
+  -- Check if run is cancellable (any non-terminal status — keep in sync with watch_run / watch.filter)
+  if not watch_filter.ACTIVE_STATUSES[run.status] then
     local message = string.format(
-      '[GitHub Actions] Run #%d is %s. Only in-progress or queued runs can be cancelled.',
+      '[GitHub Actions] Run #%d is %s. Only active (non-completed) runs can be cancelled.',
       run.databaseId,
       run.status
     )
@@ -447,41 +510,25 @@ local function cancel_run(bufnr)
   end)
 end
 
----Open workflow run or job URL in browser
+---Resolve the run/job URL under cursor and pass it to callback
 ---@param bufnr number Buffer number
-local function open_in_browser(bufnr)
+---@param callback fun(url: string) Called on the main loop with the resolved URL
+local function resolve_url_at_cursor(bufnr, callback)
   local data = buffer_data[bufnr]
   if not data or not data.runs then
     return
   end
 
-  -- Check if cursor is on a job
+  -- Prefer job (more specific), fall back to run
   local job_run_idx, job_idx = cursor_tracker.get_job_at_cursor(data.runs)
-  if job_run_idx and job_idx then
-    local run = data.runs[job_run_idx]
-    local job = run.jobs[job_idx]
-
-    url_module.get_repo_info(function(owner, repo, err)
-      vim.schedule(function()
-        if err or not owner or not repo then
-          vim.notify('[GitHub Actions] ' .. (err or 'Failed to get repo info'), vim.log.levels.ERROR)
-          return
-        end
-        local url = url_module.build_job_url(owner, repo, run.databaseId, job.databaseId)
-        url_module.open_url(url)
-      end)
-    end)
-    return
-  end
-
-  -- Check if cursor is on a run
-  local run_idx = cursor_tracker.get_run_at_cursor(data.runs)
+  local run_idx = job_run_idx or cursor_tracker.get_run_at_cursor(data.runs)
   if not run_idx then
     vim.notify('[GitHub Actions] Cursor is not on a run or job', vim.log.levels.WARN)
     return
   end
 
   local run = data.runs[run_idx]
+  local job = job_idx and run.jobs[job_idx] or nil
 
   url_module.get_repo_info(function(owner, repo, err)
     vim.schedule(function()
@@ -489,9 +536,27 @@ local function open_in_browser(bufnr)
         vim.notify('[GitHub Actions] ' .. (err or 'Failed to get repo info'), vim.log.levels.ERROR)
         return
       end
-      local url = url_module.build_run_url(owner, repo, run.databaseId)
-      url_module.open_url(url)
+      local url = job and url_module.build_job_url(owner, repo, run.databaseId, job.databaseId)
+        or url_module.build_run_url(owner, repo, run.databaseId)
+      callback(url)
     end)
+  end)
+end
+
+---Open workflow run or job URL in browser
+---@param bufnr number Buffer number
+local function open_in_browser(bufnr)
+  resolve_url_at_cursor(bufnr, function(url)
+    url_module.open_url(url)
+  end)
+end
+
+---Copy workflow run or job URL under cursor to the system clipboard
+---@param bufnr number Buffer number
+local function copy_link_to_clipboard(bufnr)
+  resolve_url_at_cursor(bufnr, function(url)
+    vim.fn.setreg('+', url)
+    vim.notify('[GitHub Actions] Copied URL: ' .. url, vim.log.levels.INFO)
   end)
 end
 
@@ -501,9 +566,13 @@ end
 function M.setup_keymaps(bufnr, keymaps)
   local opts = { buffer = bufnr, noremap = true, silent = true }
 
-  -- Close buffer
+  -- Close buffer and its window
   vim.keymap.set('n', keymaps.close, function()
-    vim.api.nvim_buf_delete(bufnr, { force = true })
+    local winid = vim.api.nvim_get_current_win()
+    if vim.api.nvim_win_is_valid(winid) then
+      vim.api.nvim_win_close(winid, true)
+    end
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
   end, opts)
 
   -- Toggle expand/collapse
@@ -559,6 +628,11 @@ function M.setup_keymaps(bufnr, keymaps)
   vim.keymap.set('n', keymaps.open_browser, function()
     open_in_browser(bufnr)
   end, opts)
+
+  -- Copy run or job URL to clipboard
+  vim.keymap.set('n', keymaps.copy_link, function()
+    copy_link_to_clipboard(bufnr)
+  end, opts)
 end
 
 ---Setup syntax highlighting for the buffer
@@ -599,11 +673,41 @@ end
 local function generate_help_text(keymaps)
   -- stylua: ignore start
   return string.format(
-    '%s expand/view logs, %s collapse, %s refresh, %s rerun, %s dispatch, %s watch, %s cancel, %s open, %s close',
-    keymaps.expand, keymaps.collapse, keymaps.refresh, keymaps.rerun, keymaps.dispatch, keymaps.watch,
-    keymaps.cancel, keymaps.open_browser, keymaps.close
+    '%s expand/view logs, %s collapse, %s refresh, %s rerun, %s dispatch, '
+      .. '%s watch, %s cancel, %s open, %s copy, %s close',
+    keymaps.expand, keymaps.collapse, keymaps.refresh, keymaps.rerun, keymaps.dispatch,
+    keymaps.watch, keymaps.cancel, keymaps.open_browser, keymaps.copy_link, keymaps.close
   )
   -- stylua: ignore end
+end
+
+---Handle fetch result and render or show error in buffer
+---@param bufnr number Buffer number
+---@param err string|nil Error message from fetch
+---@param runs table|nil Runs data from fetch
+---@param custom_icons? HistoryIcons Custom icon configuration
+---@param custom_highlights? HistoryHighlights Custom highlight configuration
+---@return boolean success Whether fetch was successful and data was rendered
+function M.handle_fetch_result(bufnr, err, runs, custom_icons, custom_highlights)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  if err then
+    vim.notify('[GitHub Actions] Failed to fetch workflow runs: ' .. err, vim.log.levels.ERROR)
+    vim.bo[bufnr].modifiable = true
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { 'Failed to fetch workflow runs: ' .. err })
+    vim.bo[bufnr].modifiable = false
+    return false
+  end
+  if not runs then
+    vim.notify('[GitHub Actions] No runs data returned', vim.log.levels.ERROR)
+    vim.bo[bufnr].modifiable = true
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { 'No runs data returned' })
+    vim.bo[bufnr].modifiable = false
+    return false
+  end
+  M.render(bufnr, runs, custom_icons, custom_highlights)
+  return true
 end
 
 ---Render run list in the buffer
@@ -612,13 +716,18 @@ end
 ---@param custom_icons? HistoryIcons Custom icon configuration
 ---@param custom_highlights? HistoryHighlights Custom highlight configuration
 function M.render(bufnr, runs, custom_icons, custom_highlights)
-  -- Store buffer data for keymap handlers, preserving workflow_file, workflow_filepath, keymaps, and branch
+  -- Store buffer data for keymap handlers, preserving metadata
   local existing_data = buffer_data[bufnr] or {}
   buffer_data[bufnr] = {
     workflow_file = existing_data.workflow_file,
     workflow_filepath = existing_data.workflow_filepath,
     keymaps = existing_data.keymaps,
     branch = existing_data.branch,
+    open_mode = existing_data.open_mode,
+    window_options = existing_data.window_options,
+    watch_open_mode = existing_data.watch_open_mode,
+    watch_window_options = existing_data.watch_window_options,
+    watch_window_geometry_options = existing_data.watch_window_geometry_options,
     runs = runs,
     custom_icons = custom_icons,
     custom_highlights = custom_highlights,
