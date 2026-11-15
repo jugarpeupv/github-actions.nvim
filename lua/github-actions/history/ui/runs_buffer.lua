@@ -172,18 +172,17 @@ function M.create_buffer(workflow_file, workflow_filepath, opts)
   return bufnr, winnr
 end
 
----Toggle expand/collapse for run at cursor, or view logs for job
+---Open logs for the run or job under the cursor
+---On a run line, opens the combined all-jobs log pane; on a job line, opens that job's logs.
 ---@param bufnr number Buffer number
-local function toggle_expand(bufnr)
+local function open_logs_at_cursor(bufnr)
   local data = buffer_data[bufnr]
   if not data or not data.runs then
     return
   end
 
-  -- First, check if cursor is on a job
   local job_run_idx, job_idx = cursor_tracker.get_job_at_cursor(data.runs)
   if job_run_idx and job_idx then
-    -- Cursor is on a job, view logs for entire job
     local run = data.runs[job_run_idx]
     local job = run and run.jobs and run.jobs[job_idx]
     if run and job then
@@ -192,7 +191,23 @@ local function toggle_expand(bufnr)
     return
   end
 
-  -- Not on a job, check if on a run
+  local run_idx = cursor_tracker.get_run_at_cursor(data.runs)
+  if not run_idx then
+    vim.notify('[GitHub Actions] Cursor is not on a run or job', vim.log.levels.WARN)
+    return
+  end
+
+  log_viewer.view_run_logs(data.runs[run_idx])
+end
+
+---Toggle expansion of the run at cursor, fetching jobs on first expansion
+---@param bufnr number Buffer number
+local function toggle_run_expand(bufnr)
+  local data = buffer_data[bufnr]
+  if not data or not data.runs then
+    return
+  end
+
   local run_idx = cursor_tracker.get_run_at_cursor(data.runs)
   if not run_idx then
     return
@@ -207,7 +222,7 @@ local function toggle_expand(bufnr)
     return
   end
 
-  -- If not expanded, fetch jobs and expand
+  -- If not expanded, fetch jobs if needed and expand
   if run.jobs then
     -- Jobs already fetched, just expand
     run.expanded = true
@@ -246,9 +261,78 @@ local function toggle_expand(bufnr)
   end
 end
 
+---Whether runs should be expanded and their jobs fetched automatically
+---@return boolean enabled
+local function expand_runs_by_default()
+  local ok, github_actions = pcall(require, 'github-actions')
+  local user_config = ok and github_actions.get_config() or {}
+  local value = user_config.history and user_config.history.expand_runs_by_default
+  if value == nil then
+    return true
+  end
+  return value
+end
+
+---Expand runs that have never been toggled and fetch their jobs.
+---Runs the user explicitly collapsed are left alone.
+---@param bufnr number Buffer number
+---@param runs table[] List of run objects
+---@param custom_icons? HistoryIcons Custom icon configuration
+---@param custom_highlights? HistoryHighlights Custom highlight configuration
+function M.expand_all_runs(bufnr, runs, custom_icons, custom_highlights)
+  if not expand_runs_by_default() then
+    return
+  end
+
+  local data = buffer_data[bufnr]
+  if not data then
+    return
+  end
+
+  -- Default-expand runs that the user has not explicitly collapsed
+  for _, run in ipairs(runs) do
+    if run.expanded == nil then
+      run.expanded = true
+    end
+  end
+
+  M.render(bufnr, runs, custom_icons, custom_highlights)
+
+  -- Fetch jobs for every expanded run that does not have them yet
+  for _, run in ipairs(runs) do
+    if run.expanded and not run.jobs and not run.jobs_loading then
+      run.jobs_loading = true
+
+      history.fetch_jobs(run.databaseId, function(jobs_response, err)
+        run.jobs_loading = nil
+
+        if not vim.api.nvim_buf_is_valid(bufnr) then
+          return
+        end
+
+        if err then
+          vim.notify(
+            string.format('[GitHub Actions] Failed to fetch jobs for run #%d: %s', run.databaseId, err),
+            vim.log.levels.WARN
+          )
+          return
+        end
+
+        if jobs_response and jobs_response.jobs then
+          run.jobs = jobs_response.jobs
+          local current = buffer_data[bufnr]
+          if current and current.runs then
+            M.render(bufnr, current.runs, current.custom_icons, current.custom_highlights)
+          end
+        end
+      end)
+    end
+  end
+end
+
 ---Carry over the expand state of currently displayed runs into freshly fetched runs.
 ---Only completed runs keep their state: a run that is (or was) in progress may have
----stale jobs, and toggle_expand skips re-fetching whenever run.jobs is present.
+---stale jobs, and expansion skips re-fetching whenever run.jobs is present.
 ---@param old_runs table[] Currently displayed runs
 ---@param new_runs table[] Freshly fetched runs (mutated in place)
 ---@return table[] new_runs
@@ -330,7 +414,9 @@ local function refresh_history(bufnr)
       end
 
       -- Re-render with fresh data, keeping the expand state of completed runs
-      M.render(bufnr, M.merge_runs(data.runs or {}, runs), custom_icons, custom_highlights)
+      local merged_runs = M.merge_runs(data.runs or {}, runs)
+      M.render(bufnr, merged_runs, custom_icons, custom_highlights)
+      M.expand_all_runs(bufnr, merged_runs, custom_icons, custom_highlights)
       vim.notify('[GitHub Actions] Workflow runs refreshed', vim.log.levels.INFO)
     end)
   end)
@@ -575,29 +661,25 @@ function M.setup_keymaps(bufnr, keymaps)
     pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
   end, opts)
 
-  -- Toggle expand/collapse
-  vim.keymap.set('n', keymaps.expand, function()
-    toggle_expand(bufnr)
-  end, opts)
-
-  -- Collapse
-  vim.keymap.set('n', keymaps.collapse, function()
-    local data = buffer_data[bufnr]
-    if not data or not data.runs then
-      return
+  -- View logs: run line opens all jobs, job line opens that job
+  local function map_with_uppercase(lhs, fn)
+    vim.keymap.set('n', lhs, fn, opts)
+    if lhs:match('^%a$') then
+      local upper = lhs:upper()
+      if upper ~= lhs then
+        vim.keymap.set('n', upper, fn, opts)
+      end
     end
+  end
 
-    local run_idx = cursor_tracker.get_run_at_cursor(data.runs)
-    if not run_idx then
-      return
-    end
+  map_with_uppercase(keymaps.expand, function()
+    open_logs_at_cursor(bufnr)
+  end)
 
-    local run = data.runs[run_idx]
-    if run.expanded then
-      run.expanded = false
-      M.render(bufnr, data.runs, data.custom_icons, data.custom_highlights)
-    end
-  end, opts)
+  -- Toggle run expansion (collapse when expanded, expand when collapsed)
+  map_with_uppercase(keymaps.collapse, function()
+    toggle_run_expand(bufnr)
+  end)
 
   -- Refresh
   vim.keymap.set('n', keymaps.refresh, function()
@@ -667,15 +749,25 @@ function M.show_loading(bufnr)
   vim.bo[bufnr].modifiable = false
 end
 
+---Describe a keymap, including its uppercase alias for single-letter keys
+---@param key string Configured key
+---@return string label
+local function key_label(key)
+  if key:match('^%a$') and key:upper() ~= key then
+    return key .. '/' .. key:upper()
+  end
+  return key
+end
+
 ---Generate help text based on configured keymaps
 ---@param keymaps HistoryListKeymaps Keymap configuration
 ---@return string help_text Help text for the buffer
 local function generate_help_text(keymaps)
   -- stylua: ignore start
   return string.format(
-    '%s expand/view logs, %s collapse, %s refresh, %s rerun, %s dispatch, '
+    '%s view logs, %s collapse/expand, %s refresh, %s rerun, %s dispatch, '
       .. '%s watch, %s cancel, %s open, %s copy, %s close',
-    keymaps.expand, keymaps.collapse, keymaps.refresh, keymaps.rerun, keymaps.dispatch,
+    key_label(keymaps.expand), key_label(keymaps.collapse), keymaps.refresh, keymaps.rerun, keymaps.dispatch,
     keymaps.watch, keymaps.cancel, keymaps.open_browser, keymaps.copy_link, keymaps.close
   )
   -- stylua: ignore end
@@ -707,6 +799,7 @@ function M.handle_fetch_result(bufnr, err, runs, custom_icons, custom_highlights
     return false
   end
   M.render(bufnr, runs, custom_icons, custom_highlights)
+  M.expand_all_runs(bufnr, runs, custom_icons, custom_highlights)
   return true
 end
 

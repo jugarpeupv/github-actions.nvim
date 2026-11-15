@@ -1,6 +1,14 @@
 local buffer_utils = require('github-actions.shared.buffer_utils')
 local window_utils = require('github-actions.shared.window_utils')
 
+local ns = vim.api.nvim_create_namespace('github-actions-logs')
+
+---Pattern used to detect step section headers produced by log_parser
+local STEP_HEADER_PATTERN = '^── .+ ──$'
+
+---Pattern used to detect job section headers in the combined run log view
+local JOB_HEADER_PATTERN = '^━━ .+ ━━$'
+
 ---@class LogsBuffer
 local M = {}
 
@@ -72,32 +80,54 @@ local function focus_or_create_window(bufnr, opts)
   return winnr
 end
 
----Fold expression for GitHub Actions log groups
+---Fold expression for GitHub Actions logs
+---Job sections (in the combined view) are level 1, step sections are one level
+---deeper, and ##[group] blocks one level deeper again.
 ---@param lnum number Line number
 ---@return string Fold level
 function M.foldexpr(lnum)
   local line = vim.fn.getline(lnum)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local has_job_headers = vim.b[bufnr].github_actions_logs_has_job_headers
 
-  -- Start fold at ##[group]
-  if line:match('%[%d%d:%d%d:%d%d%] ##%[group%]') then
+  -- Start a fold at each job section header (combined run logs)
+  if line:match(JOB_HEADER_PATTERN) then
     return '>1'
   end
 
-  -- End fold at ##[endgroup]
+  local step_level = has_job_headers and 2 or 1
+  local group_level = step_level + 1
+
+  -- Start a fold at each step section header
+  if line:match(STEP_HEADER_PATTERN) then
+    return '>' .. step_level
+  end
+
+  -- Start a nested fold at ##[group]
+  if line:match('%[%d%d:%d%d:%d%d%] ##%[group%]') then
+    return '>' .. group_level
+  end
+
+  -- End the nested fold at ##[endgroup]
   if line:match('%[%d%d:%d%d:%d%d%] ##%[endgroup%]') then
-    return '<1'
+    return '<' .. group_level
   end
 
   -- Continue fold level from previous line
   return '='
 end
 
----Custom fold text for GitHub Actions log groups
+---Custom fold text for job sections, step sections, and log groups
 ---@return string Fold text
 function M.foldtext()
   local line = vim.fn.getline(vim.v.foldstart)
-  -- Extract group title after ##[group]
-  local title = line:match('%[%d%d:%d%d:%d%d%] ##%[group%](.*)') or 'Log Group'
+  local title = line:match('^━━ (.+) ━━$') or line:match('^── (.+) ──$')
+
+  if not title then
+    -- Extract group title after ##[group]
+    title = line:match('%[%d%d:%d%d:%d%d%] ##%[group%](.*)') or 'Log Group'
+  end
+
   local line_count = vim.v.foldend - vim.v.foldstart + 1
   return string.format('▸ %s (%d lines)', title, line_count)
 end
@@ -276,6 +306,26 @@ function M.render(bufnr, logs)
   vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
   vim.bo[bufnr].modifiable = false
+
+  -- Remember whether this buffer uses job-level sections so foldexpr can nest steps
+  local has_job_headers = false
+  for _, line in ipairs(lines) do
+    if line:match(JOB_HEADER_PATTERN) then
+      has_job_headers = true
+      break
+    end
+  end
+  vim.b[bufnr].github_actions_logs_has_job_headers = has_job_headers
+
+  -- Highlight job and step section headers
+  vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+  for i, line in ipairs(lines) do
+    if line:match(JOB_HEADER_PATTERN) then
+      vim.api.nvim_buf_add_highlight(bufnr, ns, 'GitHubActionsHistoryJobName', i - 1, 0, -1)
+    elseif line:match(STEP_HEADER_PATTERN) then
+      vim.api.nvim_buf_add_highlight(bufnr, ns, 'GitHubActionsHistoryStepName', i - 1, 0, -1)
+    end
+  end
 end
 
 return M

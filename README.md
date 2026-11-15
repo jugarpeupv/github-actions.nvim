@@ -108,8 +108,8 @@ require('github-actions').setup({
     keymaps = {
       list = {                -- Workflow run list buffer
         close = 'q',          -- Close the buffer
-        expand = 'l',         -- Expand/collapse run or view logs
-        collapse = 'h',       -- Collapse expanded run
+        expand = 'l',         -- View logs: run = all jobs, job = that job (L alias)
+        collapse = 'h',       -- Collapse/expand run (H alias)
         refresh = 'r',        -- Refresh history
         rerun = 'R',          -- Rerun workflow
         dispatch = 'd',       -- Dispatch workflow
@@ -121,6 +121,8 @@ require('github-actions').setup({
         close = 'q',          -- Close the buffer
       },
     },
+    -- Optional: expand every run and load its jobs/steps automatically
+    expand_runs_by_default = true,
     -- Optional: configure how buffers are opened
     buffer = {
       history = {
@@ -224,24 +226,25 @@ The `:GithubActionsHistoryByPR` command allows you to view workflow run history 
 
 #### Run History Buffer
 
-1. Press `l` on a workflow run to expand/collapse jobs and steps
-2. Press `l` on a job to view its logs in a new buffer
-3. Press `h` to collapse an expanded run
-4. Press `r` to refresh the workflow run history
-5. Press `R` to rerun the workflow at cursor
+1. Runs are expanded by default: jobs and steps are loaded automatically (disable with `expand_runs_by_default = false`)
+2. Press `l` (or `L`) on a workflow run to open the combined logs for all its jobs in a vertical split
+3. Press `l` (or `L`) on a job to view only that job's logs
+4. Press `h` (or `H`) to collapse an expanded run
+5. Press `r` to refresh the workflow run history
+6. Press `R` to rerun the workflow at cursor
    - For failed runs: Shows a picker to choose "Rerun all jobs" or "Rerun failed jobs only"
    - For non-failed runs: Reruns all jobs directly
-6. Press `d` to dispatch the current workflow (with inputs and branch selection)
-7. Press `w` to watch a running workflow (only for in_progress or queued runs)
+7. Press `d` to dispatch the current workflow (with inputs and branch selection)
+8. Press `w` to watch a running workflow (only for in_progress or queued runs)
    - Opens a terminal running `gh run watch <run-id>`
    - Returns focus to history buffer in normal mode
    - Auto-refreshes history when watch completes
-8. Press `C` to cancel a running workflow (only for in_progress or queued runs)
+9. Press `C` to cancel a running workflow (only for in_progress or queued runs)
    - Auto-refreshes history when cancel completes
-9. Press `<C-o>` to open the run or job URL in browser
-   - On a run line: Opens the workflow run page on GitHub
-   - On a job line: Opens the specific job page on GitHub
-10. Press `q` to close the history buffer
+10. Press `<C-o>` to open the run or job URL in browser
+    - On a run line: Opens the workflow run page on GitHub
+    - On a job line: Opens the specific job page on GitHub
+11. Press `q` to close the history buffer
 
 #### Log Buffer
 
@@ -250,7 +253,7 @@ The `:GithubActionsHistoryByPR` command allows you to view workflow run history 
 3. Press `zo` to open fold
 4. Press `zc` to close fold
 
-**Log Display**: Logs are automatically formatted to show only timestamps and content, removing redundant job and step name columns for better readability. Format: `[HH:MM:SS] log content`. Log groups are foldable for better navigation.
+**Log Display**: Logs are automatically formatted to show only timestamps and content, removing redundant job and step name columns for better readability. Format: `[HH:MM:SS] log content`. Log groups are foldable for better navigation. Opening logs from a run line produces a combined view with one foldable section per job, each containing its step sections and log groups.
 
 ## Keymaps
 

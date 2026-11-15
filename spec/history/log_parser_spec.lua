@@ -16,10 +16,66 @@ lint	Set up job	2025-10-17T11:23:49.1598714Z Hosted Compute Agent]]
       assert.matches('%[11:23:49%] ##%[group%]Runner Image Provisioner', result)
       assert.matches('%[11:23:49%] Hosted Compute Agent', result)
 
-      -- Should NOT contain job name or step name columns
+      -- Should NOT contain job or unknown step columns
       assert.not_matches('lint\t', result)
       assert.not_matches('UNKNOWN STEP', result)
-      assert.not_matches('Set up job', result)
+
+      -- A known step should produce a section header
+      assert.matches('── Set up job ──', result)
+    end)
+
+    it('should insert one header per step and keep lines in order', function()
+      local raw_log = [[test	Set up job	2025-10-18T04:09:32.1000000Z first
+test	Set up job	2025-10-18T04:09:32.2000000Z second
+test	Checkout	2025-10-18T04:09:36.1000000Z third
+test	Run tests	2025-10-18T04:09:37.1000000Z fourth]]
+
+      local result = log_parser.parse(raw_log)
+      local lines = vim.split(result, '\n', { plain = true })
+
+      assert.equals('── Set up job ──', lines[1])
+      assert.matches('%[04:09:32%] first', lines[2])
+      assert.matches('%[04:09:32%] second', lines[3])
+      assert.equals('── Checkout ──', lines[4])
+      assert.matches('%[04:09:36%] third', lines[5])
+      assert.equals('── Run tests ──', lines[6])
+      assert.matches('%[04:09:37%] fourth', lines[7])
+    end)
+
+    it('should attach UNKNOWN STEP lines to the previous step', function()
+      local raw_log = [[test	Set up job	2025-10-18T04:09:32.1000000Z first
+test	UNKNOWN STEP	2025-10-18T04:09:32.2000000Z second
+test	Checkout	2025-10-18T04:09:36.1000000Z third]]
+
+      local result = log_parser.parse(raw_log)
+      local lines = vim.split(result, '\n', { plain = true })
+
+      assert.equals('── Set up job ──', lines[1])
+      assert.matches('%[04:09:32%] first', lines[2])
+      assert.matches('%[04:09:32%] second', lines[3])
+      assert.equals('── Checkout ──', lines[4])
+      assert.not_matches('UNKNOWN STEP', result)
+    end)
+
+    it('should not insert step headers for raw API logs without step columns', function()
+      local raw_log = [[2025-10-18T04:09:32.3975987Z first
+2025-10-18T04:09:32.4000692Z second]]
+
+      local result = log_parser.parse(raw_log)
+
+      assert.not_matches('──', result)
+      assert.matches('%[04:09:32%] first', result)
+      assert.matches('%[04:09:32%] second', result)
+    end)
+
+    it('should allow disabling step headers', function()
+      local raw_log = [[test	Set up job	2025-10-18T04:09:32.1000000Z first
+test	Checkout	2025-10-18T04:09:36.1000000Z second]]
+
+      local result = log_parser.parse(raw_log, { group_by_step = false })
+
+      assert.not_matches('── Set up job ──', result)
+      assert.not_matches('── Checkout ──', result)
     end)
 
     it('should handle empty logs', function()

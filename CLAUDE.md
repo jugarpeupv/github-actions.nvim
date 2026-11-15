@@ -88,12 +88,13 @@ make check
 - `api.lua`: GitHub API calls for workflow runs
   - `fetch_runs()`: Fetches workflow run history
   - `fetch_jobs()`: Fetches jobs for a specific run
-  - `fetch_logs()`: Fetches logs for a specific job
+  - `fetch_logs()`: Fetches logs for a specific job via `gh run view --log --job`
   - `rerun(run_id, callback, options)`: Reruns a workflow run using `gh run rerun`
     - Supports `options.failed_only` to rerun only failed jobs (`--failed` flag)
 - `ui/runs_buffer.lua`: Manages the history buffer display
   - Keymaps are customizable via `config.history.keymaps.list`
-  - Default: `l` expand/logs, `h` collapse, `r` refresh, `R` rerun, `d` dispatch, `w` watch, `q` close
+  - Default: `l`/`L` view logs, `h`/`H` collapse/expand, `r` refresh, `R` rerun, `d` dispatch, `w` watch, `q` close
+  - Runs are expanded by default (`expand_runs_by_default = true`) with jobs and steps loaded automatically
   - Stores `workflow_filepath` for dispatch functionality
   - Rerun shows picker for failed runs to choose "all jobs" or "failed jobs only"
 - `ui/logs_buffer.lua`: Manages the logs buffer display

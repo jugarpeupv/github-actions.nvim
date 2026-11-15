@@ -40,8 +40,8 @@
 
 ---@class HistoryListKeymaps
 ---@field close? string Key to close the buffer (default: 'q')
----@field expand? string Key to expand/collapse run or view logs (default: '<CR>')
----@field collapse? string Key to collapse expanded run (default: '<BS>')
+---@field expand? string Key to view logs for a run (all jobs) or job (default: 'l', uppercase alias 'L')
+---@field collapse? string Key to toggle run expansion (default: 'h', uppercase alias 'H')
 ---@field refresh? string Key to refresh history (default: 'r')
 ---@field rerun? string Key to rerun workflow (default: 'R')
 ---@field dispatch? string Key to dispatch workflow (default: 'd')
@@ -86,6 +86,7 @@
 ---@field icons? HistoryIcons Icon options for workflow history display
 ---@field keymaps? HistoryKeymaps Keymap options for history buffers
 ---@field logs_fold_by_default? boolean Whether to fold log groups by default (default: true)
+---@field expand_runs_by_default? boolean Whether to expand every run and fetch its jobs (default: true)
 ---@field pr_mode? boolean Whether to show the pr history instead
 ---@field buffer? HistoryBufferOptions Buffer display options
 
@@ -163,6 +164,7 @@ local defaults = {
       },
     },
     logs_fold_by_default = true,
+    expand_runs_by_default = true,
     -- pr_mode = false,
     buffer = {
       history = {

@@ -147,6 +147,85 @@ test (ubuntu-latest, stable)	Run tests	2025-10-18T04:09:41.1234567Z Test Suites:
     end)
   end)
 
+  describe('fold structure', function()
+    local log_parser = require('github-actions.history.log_parser')
+
+    local function find_line(lines, pattern)
+      for i, line in ipairs(lines) do
+        if line:match(pattern) then
+          return i
+        end
+      end
+      return nil
+    end
+
+    it('should nest ##[group] folds inside step folds', function()
+      local bufnr, _ = logs_buffer.create_buffer('fold / test', 55555)
+      local raw_logs = [=[test	Set up job	2025-10-18T04:09:32.1000000Z ##[group]Runner Image
+test	Set up job	2025-10-18T04:09:32.2000000Z detail
+test	Set up job	2025-10-18T04:09:32.3000000Z ##[endgroup]
+test	Checkout	2025-10-18T04:09:36.1000000Z ##[group]Run checkout
+test	Checkout	2025-10-18T04:09:37.1000000Z done
+test	Checkout	2025-10-18T04:09:38.1000000Z ##[endgroup]]=]
+
+      logs_buffer.render(bufnr, log_parser.parse(raw_logs))
+      vim.api.nvim_set_current_buf(bufnr)
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+      local setup_header = assert(find_line(lines, '^── Set up job ──$'))
+      local setup_group = assert(find_line(lines, '%[%d%d:%d%d:%d%d%] ##%[group%]Runner Image'))
+      local setup_endgroup = assert(find_line(lines, '%[%d%d:%d%d:%d%d%] ##%[endgroup%]'))
+      local checkout_header = assert(find_line(lines, '^── Checkout ──$'))
+
+      assert.equals('>1', logs_buffer.foldexpr(setup_header))
+      assert.equals('>2', logs_buffer.foldexpr(setup_group))
+      assert.equals('<2', logs_buffer.foldexpr(setup_endgroup))
+      assert.equals('>1', logs_buffer.foldexpr(checkout_header))
+    end)
+
+    it('should nest step and group folds inside job folds', function()
+      local bufnr, _ = logs_buffer.create_buffer('fold / jobs', 55557)
+      local logs = table.concat({
+        '━━ ✓ Job: Test  2s ━━',
+        '── Set up job ──',
+        '[04:09:32] ##[group]Runner Image',
+        '[04:09:32] detail',
+        '[04:09:32] ##[endgroup]',
+      }, '\n')
+
+      logs_buffer.render(bufnr, logs)
+      vim.api.nvim_set_current_buf(bufnr)
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local job_header = assert(find_line(lines, '^━━ .*Job: Test'))
+      local step_header = assert(find_line(lines, '^── Set up job ──$'))
+      local group = assert(find_line(lines, '##%[group%]Runner Image'))
+      local endgroup = assert(find_line(lines, '##%[endgroup%]'))
+
+      assert.equals('>1', logs_buffer.foldexpr(job_header))
+      assert.equals('>2', logs_buffer.foldexpr(step_header))
+      assert.equals('>3', logs_buffer.foldexpr(group))
+      assert.equals('<3', logs_buffer.foldexpr(endgroup))
+    end)
+
+    it('should keep consecutive lines at the same fold level', function()
+      local bufnr, _ = logs_buffer.create_buffer('fold / test 2', 55556)
+      local raw_logs = [[test	Set up job	2025-10-18T04:09:32.1000000Z first
+test	Set up job	2025-10-18T04:09:32.2000000Z second]]
+
+      logs_buffer.render(bufnr, log_parser.parse(raw_logs))
+      vim.api.nvim_set_current_buf(bufnr)
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local header = assert(find_line(lines, '^── Set up job ──$'))
+
+      assert.equals('>1', logs_buffer.foldexpr(header))
+      assert.equals('=', logs_buffer.foldexpr(header + 1))
+      assert.equals('=', logs_buffer.foldexpr(header + 2))
+    end)
+  end)
+
   describe('keymap help text position', function()
     it('should display keymap help text at the top of the buffer', function()
       local bufnr, _ = logs_buffer.create_buffer('build / Run tests', 12345)

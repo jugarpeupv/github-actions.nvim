@@ -386,6 +386,187 @@ describe('history.ui.runs_buffer', function()
     end)
   end)
 
+  describe('default expansion', function()
+    local api = require('github-actions.history.api')
+    local stub = require('luassert.stub')
+
+    it('should fetch jobs and expand every run', function()
+      local bufnr = runs_buffer.create_buffer('auto.yml', '.github/workflows/auto.yml')
+      local fetch_jobs = stub(api, 'fetch_jobs')
+      finally(function()
+        fetch_jobs:revert()
+      end)
+
+      fetch_jobs.invokes(function(run_id, callback)
+        callback({
+          jobs = {
+            {
+              name = 'job-' .. run_id,
+              status = 'completed',
+              conclusion = 'success',
+              startedAt = '2025-10-19T10:00:00Z',
+              completedAt = '2025-10-19T10:01:00Z',
+              steps = {
+                {
+                  name = 'step-' .. run_id,
+                  status = 'completed',
+                  conclusion = 'success',
+                  startedAt = '2025-10-19T10:00:00Z',
+                  completedAt = '2025-10-19T10:00:30Z',
+                },
+              },
+            },
+          },
+        }, nil)
+      end)
+
+      local runs = {
+        {
+          databaseId = 111,
+          displayTitle = 'first run',
+          headBranch = 'main',
+          status = 'completed',
+          conclusion = 'success',
+          createdAt = '2025-10-19T10:00:00Z',
+          updatedAt = '2025-10-19T10:05:00Z',
+        },
+        {
+          databaseId = 222,
+          displayTitle = 'second run',
+          headBranch = 'main',
+          status = 'completed',
+          conclusion = 'success',
+          createdAt = '2025-10-19T09:00:00Z',
+          updatedAt = '2025-10-19T09:05:00Z',
+        },
+      }
+
+      assert.is_true(runs_buffer.handle_fetch_result(bufnr, nil, runs))
+
+      assert.equals(2, #fetch_jobs.calls)
+      local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+      assert.matches('Job: job%-111', content)
+      assert.matches('step%-111', content)
+      assert.matches('Job: job%-222', content)
+      assert.matches('step%-222', content)
+    end)
+  end)
+
+  describe('logs and collapse keymaps', function()
+    local log_viewer = require('github-actions.history.ui.log_viewer')
+
+    local function press_key(bufnr, lhs)
+      for _, m in ipairs(vim.api.nvim_buf_get_keymap(bufnr, 'n')) do
+        if m.lhs == lhs then
+          m.callback()
+          return
+        end
+      end
+      error('keymap "' .. lhs .. '" not found')
+    end
+
+    local function make_expanded_run()
+      return {
+        databaseId = 12345,
+        displayTitle = 'test run',
+        headBranch = 'main',
+        status = 'completed',
+        conclusion = 'success',
+        createdAt = '2025-10-19T10:00:00Z',
+        updatedAt = '2025-10-19T10:05:00Z',
+        expanded = true,
+        jobs = {
+          {
+            databaseId = 54321,
+            name = 'build',
+            status = 'completed',
+            conclusion = 'success',
+            startedAt = '2025-10-19T10:00:00Z',
+            completedAt = '2025-10-19T10:01:00Z',
+            steps = {
+              {
+                name = 'Setup',
+                status = 'completed',
+                conclusion = 'success',
+                startedAt = '2025-10-19T10:00:00Z',
+                completedAt = '2025-10-19T10:00:10Z',
+              },
+            },
+          },
+        },
+      }
+    end
+
+    it('should bind uppercase L and H aliases', function()
+      local bufnr = runs_buffer.create_buffer('aliases.yml', '.github/workflows/aliases.yml')
+      local keys = {}
+      for _, m in ipairs(vim.api.nvim_buf_get_keymap(bufnr, 'n')) do
+        keys[m.lhs] = true
+      end
+
+      assert.is_true(keys['L'], 'L alias should exist')
+      assert.is_true(keys['H'], 'H alias should exist')
+    end)
+
+    it('should open all job logs with L on a run line', function()
+      local bufnr, winnr = runs_buffer.create_buffer('all_logs.yml', '.github/workflows/all_logs.yml')
+      local run = make_expanded_run()
+      runs_buffer.render(bufnr, { run })
+
+      vim.api.nvim_set_current_win(winnr)
+      vim.api.nvim_win_set_cursor(winnr, { 3, 0 })
+
+      local captured
+      local original = log_viewer.view_run_logs
+      log_viewer.view_run_logs = function(r)
+        captured = r
+      end
+
+      press_key(bufnr, 'L')
+      log_viewer.view_run_logs = original
+
+      assert.equals(run, captured)
+    end)
+
+    it('should open a single job log with L on a job line', function()
+      local bufnr, winnr = runs_buffer.create_buffer('job_log.yml', '.github/workflows/job_log.yml')
+      local run = make_expanded_run()
+      runs_buffer.render(bufnr, { run })
+
+      vim.api.nvim_set_current_win(winnr)
+      vim.api.nvim_win_set_cursor(winnr, { 4, 0 })
+
+      local captured_run, captured_job
+      local original = log_viewer.view_logs
+      log_viewer.view_logs = function(r, j)
+        captured_run, captured_job = r, j
+      end
+
+      press_key(bufnr, 'L')
+      log_viewer.view_logs = original
+
+      assert.equals(run, captured_run)
+      assert.equals(run.jobs[1], captured_job)
+    end)
+
+    it('should toggle run expansion with H', function()
+      local bufnr, winnr = runs_buffer.create_buffer('toggle.yml', '.github/workflows/toggle.yml')
+      local run = make_expanded_run()
+      runs_buffer.render(bufnr, { run })
+
+      vim.api.nvim_set_current_win(winnr)
+      vim.api.nvim_win_set_cursor(winnr, { 3, 0 })
+
+      press_key(bufnr, 'H')
+      local collapsed = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+      assert.not_matches('Job: build', collapsed)
+
+      press_key(bufnr, 'H')
+      local expanded = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+      assert.matches('Job: build', expanded)
+    end)
+  end)
+
   describe('watch run functionality', function()
     it('should set up w keymap for watching runs', function()
       local bufnr, _ = runs_buffer.create_buffer('ci.yml', '.github/workflows/ci.yml')
@@ -655,7 +836,7 @@ describe('history.ui.runs_buffer', function()
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
       -- First line should contain keymap help text
-      assert.matches('l expand', lines[1])
+      assert.matches('l/L view logs', lines[1])
       assert.matches('q close', lines[1])
     end)
 
@@ -1121,8 +1302,13 @@ describe('history.ui.runs_buffer', function()
     ---Stub history.fetch_runs so the refresh stays in flight until the callback is invoked
     local function stub_fetch_runs()
       local fetch = stub(api, 'fetch_runs')
+      local fetch_jobs = stub(api, 'fetch_jobs')
       finally(function()
         fetch:revert()
+        fetch_jobs:revert()
+      end)
+      fetch_jobs.invokes(function(_, callback)
+        callback({ jobs = {} }, nil)
       end)
       local captured_callback
       fetch.invokes(function(_, callback)
